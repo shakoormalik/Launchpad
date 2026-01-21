@@ -5,7 +5,8 @@ import { ChatInput } from "./ChatInput";
 import { QuickReplies } from "./QuickReplies";
 import { useChatbot } from "@/hooks/useChatbot";
 import { Button } from "@/components/ui/button";
-import { Rocket, Sparkles } from "lucide-react";
+import { Rocket } from "lucide-react";
+import launchpadLogo from "@/assets/launchpad-logo.png";
 
 export const ChatContainer = () => {
   const { messages, isTyping, quickReplies, sendMessage, startLesson, hasStarted } = useChatbot();
@@ -22,14 +23,11 @@ export const ChatContainer = () => {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {!hasStarted ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in py-8">
-            <div className="relative mb-6">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-soft">
-                <Rocket className="w-12 h-12 text-primary-foreground animate-bounce-subtle" />
-              </div>
-              <div className="absolute -bottom-2 -right-2 w-10 h-10 rounded-full bg-secondary flex items-center justify-center shadow-lg">
-                <Sparkles className="w-5 h-5 text-secondary-foreground" />
-              </div>
-            </div>
+            <img 
+              src={launchpadLogo} 
+              alt="LaunchPad Financial Literacy Series" 
+              className="h-20 w-auto mb-6"
+            />
             
             <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
               Welcome to LaunchPad!
