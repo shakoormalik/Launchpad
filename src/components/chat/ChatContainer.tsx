@@ -75,7 +75,7 @@ export const ChatContainer = () => {
       <div className="flex flex-col h-screen max-h-screen bg-background">
         <ChatHeader />
         
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col items-center justify-center">
+        <div className="flex-1 overflow-y-auto p-4 pt-6 flex flex-col items-center justify-start">
           <div className="flex flex-col items-center justify-center animate-fade-in py-8 max-w-lg w-full">
             <img 
               src={launchpadLogo} 
@@ -113,7 +113,7 @@ export const ChatContainer = () => {
     <div className="flex flex-col h-screen max-h-screen bg-background">
       <ChatHeader />
       
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 pt-6 space-y-4">
         {!lessonData.hasStarted ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in py-8">
             <Button
