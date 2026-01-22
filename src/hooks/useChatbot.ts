@@ -263,6 +263,13 @@ export const useChatbot = () => {
     }
   }, [addMessage, currentStep, simulateTyping]);
 
+  const resetLesson = useCallback(() => {
+    setMessages([]);
+    setCurrentStep(0);
+    setQuickReplies([]);
+    setHasStarted(false);
+  }, []);
+
   return {
     messages,
     isTyping,
@@ -270,5 +277,6 @@ export const useChatbot = () => {
     sendMessage,
     startLesson,
     hasStarted,
+    resetLesson,
   };
 };
