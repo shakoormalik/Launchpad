@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -6,28 +6,54 @@ import { QuickReplies } from "./QuickReplies";
 import { LessonSelector } from "./LessonSelector";
 import { useChatbot } from "@/hooks/useChatbot";
 import { useLesson2Chatbot } from "@/hooks/useLesson2Chatbot";
+import { useGenericLesson } from "@/hooks/useGenericLesson";
+import { getLessonData, isGenericLesson } from "@/data/lessonDataLoader";
 import { Button } from "@/components/ui/button";
 import { Rocket, ArrowLeft } from "lucide-react";
 import { lessons } from "@/data/lessons";
 import launchpadLogo from "@/assets/launchpad-logo.png";
 
-type ViewState = "menu" | "lesson1" | "lesson2";
+type ViewState = "menu" | string; // "menu" or lessonId
 
 export const ChatContainer = () => {
   const [viewState, setViewState] = useState<ViewState>("menu");
   const [completedLessons, setCompletedLessons] = useState<string[]>([]);
+  const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
   
+  // Legacy hooks for Lesson 1 and 2
   const lesson1 = useChatbot();
   const lesson2 = useLesson2Chatbot();
+  
+  // Get lesson data for generic lessons
+  const genericLessonData = useMemo(() => {
+    if (activeLessonId && isGenericLesson(activeLessonId)) {
+      return getLessonData(activeLessonId);
+    }
+    return null;
+  }, [activeLessonId]);
+  
+  // Generic lesson hook - always called but only used for generic lessons
+  const genericLesson = useGenericLesson(genericLessonData || {
+    lessonIntroduction: "",
+    preTestIntro: "",
+    preTest: [],
+    preTestComplete: "",
+    topics: [],
+    postTestIntro: "",
+    postTest: [],
+    lessonCompletion: "",
+  });
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Get current lesson data based on view state
-  const getCurrentLesson = () => {
-    if (viewState === "lesson1") return lesson1;
-    if (viewState === "lesson2") return lesson2;
+  const getCurrentLesson = useCallback(() => {
+    if (viewState === "menu") return null;
+    if (viewState === "earning-money") return lesson1;
+    if (viewState === "living-on-your-own") return lesson2;
+    if (isGenericLesson(viewState)) return genericLesson;
     return null;
-  };
+  }, [viewState, lesson1, lesson2, genericLesson]);
 
   const currentLesson = getCurrentLesson();
 
@@ -35,39 +61,68 @@ export const ChatContainer = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentLesson?.messages, currentLesson?.isTyping]);
 
-  const handleSelectLesson = useCallback((lessonId: string) => {
-    if (lessonId === "earning-money") {
-      setViewState("lesson1");
-    } else if (lessonId === "living-on-your-own") {
-      setViewState("lesson2");
+  // Reset generic lesson when switching lessons
+  useEffect(() => {
+    if (activeLessonId && isGenericLesson(activeLessonId) && viewState === activeLessonId) {
+      genericLesson.resetLesson();
     }
-  }, []);
+  }, [activeLessonId]);
+
+  const handleSelectLesson = useCallback((lessonId: string) => {
+    setActiveLessonId(lessonId);
+    setViewState(lessonId);
+    
+    // Reset the appropriate lesson hook
+    if (isGenericLesson(lessonId)) {
+      genericLesson.resetLesson();
+    }
+  }, [genericLesson]);
 
   const handleBackToMenu = useCallback(() => {
+    const currentLessonId = viewState;
     setViewState("menu");
-    // Reset lessons when going back
-    lesson1.messages.length > 0 && window.location.reload(); // Simple reset
-  }, [lesson1.messages.length]);
+    setActiveLessonId(null);
+    
+    // Reset the current lesson
+    if (currentLessonId === "earning-money") {
+      lesson1.resetLesson();
+    } else if (currentLessonId === "living-on-your-own") {
+      lesson2.resetLesson();
+    } else if (isGenericLesson(currentLessonId)) {
+      genericLesson.resetLesson();
+    }
+  }, [viewState, lesson1, lesson2, genericLesson]);
 
   const handleSendMessage = useCallback(async (content: string) => {
-    if (viewState === "lesson1") {
+    if (viewState === "earning-money") {
       await lesson1.sendMessage(content);
-      // Check if user wants to go back to menu
-      if (content.toLowerCase().includes("menu") || content.toLowerCase().includes("restart")) {
-        // Lesson 1 handles restart internally
-      }
-    } else if (viewState === "lesson2") {
+    } else if (viewState === "living-on-your-own") {
       const shouldGoToMenu = await lesson2.sendMessage(content);
       if (shouldGoToMenu) {
-        // Mark lesson as completed if they finished
         if (!completedLessons.includes("living-on-your-own")) {
           setCompletedLessons(prev => [...prev, "living-on-your-own"]);
         }
         lesson2.resetLesson();
         setViewState("menu");
+        setActiveLessonId(null);
+      }
+    } else if (isGenericLesson(viewState)) {
+      const shouldGoToMenu = await genericLesson.sendMessage(content);
+      if (shouldGoToMenu) {
+        if (!completedLessons.includes(viewState)) {
+          setCompletedLessons(prev => [...prev, viewState]);
+        }
+        genericLesson.resetLesson();
+        setViewState("menu");
+        setActiveLessonId(null);
       }
     }
-  }, [viewState, lesson1, lesson2, completedLessons]);
+  }, [viewState, lesson1, lesson2, genericLesson, completedLessons]);
+
+  // Get lesson metadata for display
+  const getLessonMeta = useCallback((lessonId: string) => {
+    return lessons.find(l => l.id === lessonId);
+  }, []);
 
   // Render menu/lesson selector
   if (viewState === "menu") {
@@ -107,7 +162,10 @@ export const ChatContainer = () => {
 
   // Render lesson view
   const lessonData = currentLesson!;
-  const lessonTitle = viewState === "lesson1" ? "Earning Money" : "Living on Your Own";
+  const lessonMeta = getLessonMeta(viewState);
+  const lessonTitle = lessonMeta?.title || "Lesson";
+  const lessonNumber = lessonMeta?.number || 1;
+  const lessonDescription = lessonMeta?.description || "";
 
   return (
     <div className="flex flex-col h-screen max-h-screen bg-background">
@@ -133,17 +191,14 @@ export const ChatContainer = () => {
             />
             
             <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full mb-3">
-              {viewState === "lesson1" ? "Lesson 1" : "Lesson 2"}
+              Lesson {lessonNumber}
             </span>
             
             <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
               {lessonTitle}
             </h2>
             <p className="text-muted-foreground text-center max-w-sm mb-6">
-              {viewState === "lesson1" 
-                ? "Learn what earning money means and how you can start building your financial future today!"
-                : "Discover what it really takes to live independently and manage your own life successfully!"
-              }
+              {lessonDescription}
             </p>
             
             <Button 
