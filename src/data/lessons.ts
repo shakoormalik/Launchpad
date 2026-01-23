@@ -178,6 +178,34 @@ export const lessons: LessonInfo[] = [
       "Building smart credit habits"
     ],
     isAvailable: true
+  },
+  {
+    id: "consumer-privacy",
+    number: 13,
+    title: "Consumer Privacy",
+    description: "Learn what consumer privacy is, why it matters, and how to protect your personal information in the digital age.",
+    duration: "20-25 min",
+    topics: [
+      "What is data privacy?",
+      "Data profiles and how they affect you",
+      "Laws that protect your privacy",
+      "Practical steps to protect yourself"
+    ],
+    isAvailable: true
+  },
+  {
+    id: "using-credit",
+    number: 14,
+    title: "Using Credit",
+    description: "Learn how to use credit wisely, understand the types of consumer credit, and avoid common debt traps.",
+    duration: "25-30 min",
+    topics: [
+      "What it means to use credit",
+      "Pros and cons of borrowing",
+      "Creditworthiness and building credit",
+      "Managing a safe debt load"
+    ],
+    isAvailable: true
   }
 ];
 

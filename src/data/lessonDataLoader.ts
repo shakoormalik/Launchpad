@@ -14,6 +14,8 @@ import * as lesson9Data from "./lesson9-banking";
 import * as lesson10Data from "./lesson10-take-home-pay";
 import * as lesson11Data from "./lesson11-financial-decisions";
 import * as lesson12Data from "./lesson12-credit-score";
+import * as lesson13Data from "./lesson13-consumer-privacy";
+import * as lesson14Data from "./lesson14-using-credit";
 
 // Helper to normalize lesson data format
 const createLessonData = (data: {
@@ -48,6 +50,8 @@ export const lessonDataMap: Record<string, LessonData> = {
   "take-home-pay": createLessonData(lesson10Data),
   "financial-decisions": createLessonData(lesson11Data),
   "credit-score": createLessonData(lesson12Data),
+  "consumer-privacy": createLessonData(lesson13Data),
+  "using-credit": createLessonData(lesson14Data),
 };
 
 export const getLessonData = (lessonId: string): LessonData | null => {
@@ -66,6 +70,8 @@ export const genericLessonIds = [
   "take-home-pay",
   "financial-decisions",
   "credit-score",
+  "consumer-privacy",
+  "using-credit",
 ];
 
 export const isGenericLesson = (lessonId: string): boolean => {
