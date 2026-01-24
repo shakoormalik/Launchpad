@@ -260,20 +260,40 @@ export const useGenericLesson = (lessonData: LessonData) => {
           
           await simulateTyping(expandedContent, ["Got it! Continue", "That helps!"]);
         } else {
-          // Move to discussion question
-          stateRef.current.phase = "topic-discussion";
-          const discussionText = `🤔 **Let's think about this:**\n\n${currentTopic.discussionQuestion}`;
-          await simulateTyping(discussionText, ["Share my thoughts..."]);
+          // Skip discussion and move to next topic or post-test directly
+          const nextTopicIndex = stateRef.current.topicIndex + 1;
+          
+          if (nextTopicIndex >= lessonData.topics.length) {
+            // All topics done, move to post-test
+            stateRef.current.phase = "posttest-intro";
+            stateRef.current.topicIndex = nextTopicIndex;
+            await simulateTyping(lessonData.postTestIntro, ["Start the quiz!"]);
+          } else {
+            stateRef.current.topicIndex = nextTopicIndex;
+            const nextTopic = lessonData.topics[nextTopicIndex];
+            const topicContent = formatTopicContent(nextTopic);
+            await simulateTyping(`Great! Let's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
+          }
         }
         break;
       }
 
       case "topic-learn-more": {
-        // Move to discussion question after expanded content
-        stateRef.current.phase = "topic-discussion";
-        const currentTopic = lessonData.topics[stateRef.current.topicIndex];
-        const discussionText = `🤔 **Now let's think about this:**\n\n${currentTopic.discussionQuestion}`;
-        await simulateTyping(discussionText, ["Share my thoughts..."]);
+        // Move to next topic or post-test after expanded content
+        const nextTopicIndex = stateRef.current.topicIndex + 1;
+        
+        if (nextTopicIndex >= lessonData.topics.length) {
+          // All topics done, move to post-test
+          stateRef.current.phase = "posttest-intro";
+          stateRef.current.topicIndex = nextTopicIndex;
+          await simulateTyping(lessonData.postTestIntro, ["Start the quiz!"]);
+        } else {
+          stateRef.current.phase = "topic";
+          stateRef.current.topicIndex = nextTopicIndex;
+          const nextTopic = lessonData.topics[nextTopicIndex];
+          const topicContent = formatTopicContent(nextTopic);
+          await simulateTyping(`Great! Let's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
+        }
         break;
       }
 
