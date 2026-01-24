@@ -103,6 +103,17 @@ export const ChatContainer = () => {
     }
   }, [genericLesson.completionData, activeLessonId, recordLessonCompletion]);
 
+  // Track completion for Lesson 1
+  useEffect(() => {
+    if (lesson1.completionData && viewState === "earning-money") {
+      recordLessonCompletion(
+        "earning-money",
+        lesson1.completionData.postTestScore,
+        lesson1.completionData.postTestTotal
+      );
+    }
+  }, [lesson1.completionData, viewState, recordLessonCompletion]);
+
   const handleSelectLesson = useCallback((lessonId: string) => {
     setActiveLessonId(lessonId);
     setViewState(lessonId);
