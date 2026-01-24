@@ -1,14 +1,21 @@
 import { LessonInfo } from "@/data/lessons";
+import { LessonProgress } from "@/hooks/useProgressTracking";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Clock, CheckCircle, Lock } from "lucide-react";
+import { BookOpen, Clock, CheckCircle, Lock, Trophy, RefreshCw } from "lucide-react";
 
 interface LessonSelectorProps {
   lessons: LessonInfo[];
   onSelectLesson: (lessonId: string) => void;
   completedLessons?: string[];
+  lessonProgress?: Map<string, LessonProgress>;
 }
 
-export const LessonSelector = ({ lessons, onSelectLesson, completedLessons = [] }: LessonSelectorProps) => {
+export const LessonSelector = ({ 
+  lessons, 
+  onSelectLesson, 
+  completedLessons = [],
+  lessonProgress = new Map()
+}: LessonSelectorProps) => {
   return (
     <div className="space-y-4 w-full max-w-md">
       <h3 className="text-lg font-semibold text-center text-foreground mb-4">
@@ -17,13 +24,22 @@ export const LessonSelector = ({ lessons, onSelectLesson, completedLessons = [] 
       
       {lessons.map((lesson) => {
         const isCompleted = completedLessons.includes(lesson.id);
+        const progress = lessonProgress.get(lesson.id);
+        const percentage = progress 
+          ? Math.round((progress.postTestScore / progress.postTestTotal) * 100)
+          : null;
+        const isPassing = percentage !== null && percentage >= 80;
         
         return (
           <div
             key={lesson.id}
             className={`relative rounded-xl border-2 transition-all overflow-hidden ${
               lesson.isAvailable 
-                ? "border-border hover:border-primary/50 hover:shadow-md cursor-pointer" 
+                ? isCompleted 
+                  ? isPassing
+                    ? "border-primary/50 bg-primary/5 hover:border-primary hover:shadow-md cursor-pointer"
+                    : "border-accent/50 bg-accent/5 hover:border-accent hover:shadow-md cursor-pointer"
+                  : "border-border hover:border-primary/50 hover:shadow-md cursor-pointer" 
                 : "border-muted opacity-60"
             }`}
           >
@@ -39,7 +55,17 @@ export const LessonSelector = ({ lessons, onSelectLesson, completedLessons = [] 
                     Lesson {lesson.number}
                   </span>
                   {isCompleted && (
-                    <CheckCircle className="w-4 h-4 text-primary flex-shrink-0" />
+                    isPassing ? (
+                      <div className="flex items-center gap-1">
+                        <Trophy className="w-4 h-4 text-primary flex-shrink-0" />
+                        <span className="text-xs font-medium text-primary">{percentage}%</span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1">
+                        <RefreshCw className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+                        <span className="text-xs font-medium text-muted-foreground">{percentage}%</span>
+                      </div>
+                    )
                   )}
                 </div>
                 <div className="flex items-center gap-1 text-xs text-muted-foreground whitespace-nowrap">
@@ -65,7 +91,13 @@ export const LessonSelector = ({ lessons, onSelectLesson, completedLessons = [] 
                 {lesson.description}
               </p>
               
-              {lesson.isAvailable && lesson.topics.length > 0 && (
+              {isCompleted && !isPassing && (
+                <p className="text-xs text-accent-foreground/70 italic">
+                  💪 Try again to reach 80% passing!
+                </p>
+              )}
+              
+              {lesson.isAvailable && lesson.topics.length > 0 && !isCompleted && (
                 <div className="flex flex-wrap gap-1 mt-1 w-full">
                   {lesson.topics.slice(0, 2).map((topic, idx) => (
                     <span 
