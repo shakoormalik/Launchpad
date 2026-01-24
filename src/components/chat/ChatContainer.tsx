@@ -4,9 +4,11 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { QuickReplies } from "./QuickReplies";
 import { LessonSelector } from "./LessonSelector";
+import { ProgressDashboard } from "./ProgressDashboard";
 import { useChatbot } from "@/hooks/useChatbot";
 import { useLesson2Chatbot } from "@/hooks/useLesson2Chatbot";
 import { useGenericLesson } from "@/hooks/useGenericLesson";
+import { useProgressTracking, LessonProgress } from "@/hooks/useProgressTracking";
 import { getLessonData, isGenericLesson } from "@/data/lessonDataLoader";
 import { Button } from "@/components/ui/button";
 import { Rocket, ArrowLeft } from "lucide-react";
@@ -17,8 +19,16 @@ type ViewState = "menu" | string; // "menu" or lessonId
 
 export const ChatContainer = () => {
   const [viewState, setViewState] = useState<ViewState>("menu");
-  const [completedLessons, setCompletedLessons] = useState<string[]>([]);
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
+  
+  // Progress tracking
+  const { 
+    progress, 
+    recordLessonCompletion, 
+    getLessonProgress,
+    getOverallGrade,
+    getEncouragementMessage 
+  } = useProgressTracking();
   
   // Legacy hooks for Lesson 1 and 2
   const lesson1 = useChatbot();
@@ -46,6 +56,20 @@ export const ChatContainer = () => {
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // Get completed lessons from progress
+  const completedLessons = useMemo(() => {
+    return progress.lessonsCompleted.map(l => l.lessonId);
+  }, [progress]);
+
+  // Build lesson progress map for display
+  const lessonProgressMap = useMemo(() => {
+    const map = new Map<string, LessonProgress>();
+    progress.lessonsCompleted.forEach(lp => {
+      map.set(lp.lessonId, lp);
+    });
+    return map;
+  }, [progress]);
+
   // Get current lesson data based on view state
   const getCurrentLesson = useCallback(() => {
     if (viewState === "menu") return null;
@@ -67,6 +91,17 @@ export const ChatContainer = () => {
       genericLesson.resetLesson();
     }
   }, [activeLessonId]);
+
+  // Track completion when genericLesson completes
+  useEffect(() => {
+    if (genericLesson.completionData && activeLessonId) {
+      recordLessonCompletion(
+        activeLessonId,
+        genericLesson.completionData.postTestScore,
+        genericLesson.completionData.postTestTotal
+      );
+    }
+  }, [genericLesson.completionData, activeLessonId, recordLessonCompletion]);
 
   const handleSelectLesson = useCallback((lessonId: string) => {
     setActiveLessonId(lessonId);
@@ -99,9 +134,6 @@ export const ChatContainer = () => {
     } else if (viewState === "living-on-your-own") {
       const shouldGoToMenu = await lesson2.sendMessage(content);
       if (shouldGoToMenu) {
-        if (!completedLessons.includes("living-on-your-own")) {
-          setCompletedLessons(prev => [...prev, "living-on-your-own"]);
-        }
         lesson2.resetLesson();
         setViewState("menu");
         setActiveLessonId(null);
@@ -109,20 +141,21 @@ export const ChatContainer = () => {
     } else if (isGenericLesson(viewState)) {
       const shouldGoToMenu = await genericLesson.sendMessage(content);
       if (shouldGoToMenu) {
-        if (!completedLessons.includes(viewState)) {
-          setCompletedLessons(prev => [...prev, viewState]);
-        }
         genericLesson.resetLesson();
         setViewState("menu");
         setActiveLessonId(null);
       }
     }
-  }, [viewState, lesson1, lesson2, genericLesson, completedLessons]);
+  }, [viewState, lesson1, lesson2, genericLesson]);
 
   // Get lesson metadata for display
   const getLessonMeta = useCallback((lessonId: string) => {
     return lessons.find(l => l.id === lessonId);
   }, []);
+
+  // Calculate overall stats
+  const overallGrade = getOverallGrade();
+  const encouragementMessage = getEncouragementMessage();
 
   // Render menu/lesson selector
   if (viewState === "menu") {
@@ -141,14 +174,24 @@ export const ChatContainer = () => {
             <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
               Welcome to LaunchPad!
             </h2>
-            <p className="text-muted-foreground text-center max-w-sm mb-8">
+            <p className="text-muted-foreground text-center max-w-sm mb-6">
               Your journey to financial literacy starts here. Choose a lesson to begin learning!
             </p>
+            
+            {/* Progress Dashboard */}
+            <ProgressDashboard
+              lessonsCompleted={overallGrade.lessonsCompleted}
+              totalLessons={lessons.filter(l => l.isAvailable).length}
+              overallGrade={overallGrade.percentage}
+              isPassing={overallGrade.isPassing}
+              encouragementMessage={encouragementMessage}
+            />
             
             <LessonSelector 
               lessons={lessons} 
               onSelectLesson={handleSelectLesson}
               completedLessons={completedLessons}
+              lessonProgress={lessonProgressMap}
             />
             
             <p className="text-xs text-muted-foreground mt-6 text-center max-w-xs">

@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { generateTopicAnalogy, generateDiscussionResponse } from "@/data/topicAnalogies";
 
 export interface Message {
   id: string;
@@ -8,23 +9,23 @@ export interface Message {
 
 // Unified interfaces for lesson data
 export interface PreTestQuestion {
-  id: string;
+  id: string | number;
   question: string;
   options?: string[];
-  correctAnswer?: string;
+  correctAnswer?: string | number;
   mentorAnswer?: string; // For open-ended questions (Lesson 2 style)
 }
 
 export interface PostTestQuestion {
-  id: string;
+  id: string | number;
   question: string;
   options: string[];
-  correctAnswer: string;
+  correctAnswer: string | number;
   explanation: string;
 }
 
 export interface LessonTopic {
-  id: string;
+  id: string | number;
   title: string;
   content: string;
   analogy?: string;
@@ -50,6 +51,7 @@ type LessonPhase =
   | "pretest-complete" 
   | "topic" 
   | "topic-discussion" 
+  | "topic-learn-more"
   | "posttest-intro" 
   | "posttest" 
   | "complete";
@@ -58,25 +60,35 @@ interface LessonState {
   phase: LessonPhase;
   pretestIndex: number;
   pretestResponses: string[];
+  pretestCorrect: number;
   topicIndex: number;
   posttestIndex: number;
   posttestScore: number;
+  lastStudentResponse: string;
 }
 
 const initialState: LessonState = {
   phase: "intro",
   pretestIndex: 0,
   pretestResponses: [],
+  pretestCorrect: 0,
   topicIndex: 0,
   posttestIndex: 0,
   posttestScore: 0,
+  lastStudentResponse: "",
 };
+
+export interface LessonCompletionData {
+  postTestScore: number;
+  postTestTotal: number;
+}
 
 export const useGenericLesson = (lessonData: LessonData) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
+  const [completionData, setCompletionData] = useState<LessonCompletionData | null>(null);
   
   const stateRef = useRef<LessonState>({ ...initialState });
 
@@ -118,6 +130,37 @@ export const useGenericLesson = (lessonData: LessonData) => {
     return content;
   };
 
+  const checkPreTestAnswer = (userAnswer: string, question: PreTestQuestion): boolean => {
+    if (!question.correctAnswer) return false;
+    
+    const answer = userAnswer.trim().toLowerCase();
+    const correct = String(question.correctAnswer).toLowerCase();
+    
+    // Check direct match
+    if (answer === correct) return true;
+    
+    // For numeric answers (index-based)
+    if (question.options && typeof question.correctAnswer === 'number') {
+      const correctOption = question.options[question.correctAnswer];
+      if (answer === correctOption?.toLowerCase()) return true;
+    }
+    
+    // Check if answer starts with or contains correct answer
+    if (answer.includes(correct) || correct.includes(answer)) return true;
+    
+    // Check against options
+    if (question.options) {
+      const matchingOption = question.options.find(opt => 
+        opt.toLowerCase() === answer || 
+        answer.includes(opt.toLowerCase()) ||
+        opt.toLowerCase().includes(answer)
+      );
+      if (matchingOption && matchingOption.toLowerCase().includes(correct)) return true;
+    }
+    
+    return false;
+  };
+
   const startLesson = useCallback(async () => {
     if (hasStarted) return;
     setHasStarted(true);
@@ -145,6 +188,7 @@ export const useGenericLesson = (lessonData: LessonData) => {
 
       case "pretest-intro": {
         stateRef.current.phase = "pretest";
+        stateRef.current.pretestCorrect = 0;
         const firstQuestion = lessonData.preTest[0];
         const questionText = `**Question 1 of ${lessonData.preTest.length}:**\n\n${firstQuestion.question}`;
         const replies = firstQuestion.options || ["Share your thoughts..."];
@@ -153,14 +197,37 @@ export const useGenericLesson = (lessonData: LessonData) => {
       }
 
       case "pretest": {
+        const currentQuestion = lessonData.preTest[stateRef.current.pretestIndex];
         stateRef.current.pretestResponses.push(content);
+        
+        // Track correct answers silently (no feedback shown)
+        if (checkPreTestAnswer(content, currentQuestion)) {
+          stateRef.current.pretestCorrect += 1;
+        }
+        
         const nextIndex = stateRef.current.pretestIndex + 1;
         
         if (nextIndex >= lessonData.preTest.length) {
-          // Pre-test complete
+          // Pre-test complete - show score with encouragement
           stateRef.current.phase = "pretest-complete";
           stateRef.current.pretestIndex = nextIndex;
-          await simulateTyping(lessonData.preTestComplete, ["Start learning!"]);
+          
+          const score = stateRef.current.pretestCorrect;
+          const total = lessonData.preTest.length;
+          const percentage = Math.round((score / total) * 100);
+          
+          let encouragement: string;
+          if (percentage >= 80) {
+            encouragement = `🌟 **Great start!** You got ${score} out of ${total} correct (${percentage}%)!\n\nYou already know quite a bit about this topic! Let's build on that knowledge and make you an expert.`;
+          } else if (percentage >= 60) {
+            encouragement = `👍 **Good effort!** You got ${score} out of ${total} correct (${percentage}%).\n\nYou have some knowledge to build on! Don't worry - by the end of this lesson, these concepts will make much more sense.`;
+          } else if (percentage >= 40) {
+            encouragement = `💪 **No worries!** You got ${score} out of ${total} correct (${percentage}%).\n\nThat's exactly why we're here - to learn together! By the end of this lesson, you'll understand all of this much better.`;
+          } else {
+            encouragement = `🤝 **Don't worry at all!** You got ${score} out of ${total} correct (${percentage}%).\n\nThis is a pre-test, not a grade! Everyone starts somewhere, and I'm here to help you learn. By the end of this lesson, you'll be amazed at how much you've grown!`;
+          }
+          
+          await simulateTyping(`${encouragement}\n\n${lessonData.preTestComplete}`, ["Start learning!"]);
         } else {
           stateRef.current.pretestIndex = nextIndex;
           const nextQuestion = lessonData.preTest[nextIndex];
@@ -177,44 +244,61 @@ export const useGenericLesson = (lessonData: LessonData) => {
         stateRef.current.topicIndex = 0;
         const firstTopic = lessonData.topics[0];
         const topicContent = formatTopicContent(firstTopic);
-        await simulateTyping(topicContent, ["I understand", "Tell me more"]);
+        await simulateTyping(topicContent, ["I understand, continue", "Learn More 💡"]);
         break;
       }
 
       case "topic": {
-        // Show discussion question for current topic
+        const currentTopic = lessonData.topics[stateRef.current.topicIndex];
+        
+        // Check if they want to learn more
+        if (content.toLowerCase().includes("learn more") || content.toLowerCase().includes("more")) {
+          stateRef.current.phase = "topic-learn-more";
+          const analogy = generateTopicAnalogy(currentTopic.title, currentTopic.content);
+          
+          const expandedContent = `💡 **Let's Make This Real!**\n\n**Analogy:** ${analogy.analogy}\n\n**Real-World Example:** ${analogy.realWorldExample}${analogy.funFact ? `\n\n🎯 **Fun Fact:** ${analogy.funFact}` : ""}`;
+          
+          await simulateTyping(expandedContent, ["Got it! Continue", "That helps!"]);
+        } else {
+          // Move to discussion question
+          stateRef.current.phase = "topic-discussion";
+          const discussionText = `🤔 **Let's think about this:**\n\n${currentTopic.discussionQuestion}`;
+          await simulateTyping(discussionText, ["Share my thoughts..."]);
+        }
+        break;
+      }
+
+      case "topic-learn-more": {
+        // Move to discussion question after expanded content
         stateRef.current.phase = "topic-discussion";
         const currentTopic = lessonData.topics[stateRef.current.topicIndex];
-        const discussionText = `🤔 **Let's think about this:**\n\n${currentTopic.discussionQuestion}`;
-        await simulateTyping(discussionText, ["Share your thoughts..."]);
+        const discussionText = `🤔 **Now let's think about this:**\n\n${currentTopic.discussionQuestion}`;
+        await simulateTyping(discussionText, ["Share my thoughts..."]);
         break;
       }
 
       case "topic-discussion": {
+        // Store response for contextual acknowledgment
+        stateRef.current.lastStudentResponse = content;
+        
         // Move to next topic or post-test
+        const currentTopic = lessonData.topics[stateRef.current.topicIndex];
         const nextTopicIndex = stateRef.current.topicIndex + 1;
         
-        // Acknowledge their response
-        const acknowledgments = [
-          "Great thinking! 💡",
-          "I appreciate you sharing that! 🌟",
-          "That's a thoughtful perspective! 👏",
-          "Good reflection! 💪",
-          "Thanks for sharing your thoughts! ✨"
-        ];
-        const ack = acknowledgments[Math.floor(Math.random() * acknowledgments.length)];
+        // Generate contextual acknowledgment
+        const acknowledgment = generateDiscussionResponse(currentTopic.title, content);
         
         if (nextTopicIndex >= lessonData.topics.length) {
           // All topics done, move to post-test
           stateRef.current.phase = "posttest-intro";
           stateRef.current.topicIndex = nextTopicIndex;
-          await simulateTyping(`${ack}\n\n${lessonData.postTestIntro}`, ["Start the quiz!"]);
+          await simulateTyping(`${acknowledgment}\n\n${lessonData.postTestIntro}`, ["Start the quiz!"]);
         } else {
           stateRef.current.phase = "topic";
           stateRef.current.topicIndex = nextTopicIndex;
           const nextTopic = lessonData.topics[nextTopicIndex];
           const topicContent = formatTopicContent(nextTopic);
-          await simulateTyping(`${ack}\n\nLet's move on to the next topic!\n\n${topicContent}`, ["I understand", "Tell me more"]);
+          await simulateTyping(`${acknowledgment}\n\nLet's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
         }
         break;
       }
@@ -234,32 +318,73 @@ export const useGenericLesson = (lessonData: LessonData) => {
         
         // Check if answer is correct
         const userAnswer = content.trim();
-        const isCorrect = 
-          userAnswer === currentQuestion.correctAnswer ||
-          userAnswer.startsWith(currentQuestion.correctAnswer) ||
-          currentQuestion.options.some(opt => 
-            opt.startsWith(currentQuestion.correctAnswer) && 
-            (userAnswer === opt || userAnswer.includes(opt))
-          );
+        let isCorrect = false;
+        
+        // Handle both string and number-based correct answers
+        if (typeof currentQuestion.correctAnswer === 'number') {
+          // Index-based answer
+          const correctOption = currentQuestion.options[currentQuestion.correctAnswer];
+          isCorrect = userAnswer === correctOption || 
+                     userAnswer.toLowerCase() === correctOption?.toLowerCase() ||
+                     userAnswer.includes(correctOption);
+        } else {
+          // String-based answer
+          isCorrect = 
+            userAnswer === currentQuestion.correctAnswer ||
+            userAnswer.toLowerCase() === currentQuestion.correctAnswer.toLowerCase() ||
+            userAnswer.startsWith(currentQuestion.correctAnswer) ||
+            currentQuestion.options.some(opt => 
+              opt.startsWith(String(currentQuestion.correctAnswer)) && 
+              (userAnswer === opt || userAnswer.includes(opt))
+            );
+        }
         
         if (isCorrect) {
           stateRef.current.posttestScore += 1;
         }
         
+        const correctAnswerText = typeof currentQuestion.correctAnswer === 'number' 
+          ? currentQuestion.options[currentQuestion.correctAnswer]
+          : currentQuestion.correctAnswer;
+        
         const feedback = isCorrect 
           ? `✅ **Correct!** ${currentQuestion.explanation}`
-          : `❌ **Not quite.** The correct answer is ${currentQuestion.correctAnswer}. ${currentQuestion.explanation}`;
+          : `❌ **Not quite.** The correct answer is "${correctAnswerText}". ${currentQuestion.explanation}`;
         
         const nextIndex = stateRef.current.posttestIndex + 1;
         
         if (nextIndex >= lessonData.postTest.length) {
           // Post-test complete
           stateRef.current.phase = "complete";
-          const score = stateRef.current.posttestScore + (isCorrect ? 0 : 0); // Already added above
           const totalQuestions = lessonData.postTest.length;
-          const percentage = Math.round((stateRef.current.posttestScore / totalQuestions) * 100);
+          const finalScore = stateRef.current.posttestScore;
+          const percentage = Math.round((finalScore / totalQuestions) * 100);
+          const isPassing = percentage >= 80;
           
-          const scoreMessage = `${feedback}\n\n🎉 **Quiz Complete!**\n\nYou scored **${stateRef.current.posttestScore} out of ${totalQuestions}** (${percentage}%)!\n\n${lessonData.lessonCompletion}`;
+          // Store completion data for progress tracking
+          setCompletionData({
+            postTestScore: finalScore,
+            postTestTotal: totalQuestions,
+          });
+          
+          let gradeMessage: string;
+          if (percentage >= 90) {
+            gradeMessage = `🏆 **Outstanding!** You scored **${finalScore} out of ${totalQuestions}** (${percentage}%)! You've truly mastered this material!`;
+          } else if (percentage >= 80) {
+            gradeMessage = `🎉 **Excellent work!** You scored **${finalScore} out of ${totalQuestions}** (${percentage}%)! That's a passing grade! You clearly understand these concepts well.`;
+          } else if (percentage >= 70) {
+            gradeMessage = `👍 **Good job!** You scored **${finalScore} out of ${totalQuestions}** (${percentage}%). You're almost there! Consider reviewing the topics to strengthen your understanding.`;
+          } else if (percentage >= 60) {
+            gradeMessage = `💪 **Keep going!** You scored **${finalScore} out of ${totalQuestions}** (${percentage}%). Some concepts might need more practice. Feel free to retake this lesson anytime!`;
+          } else {
+            gradeMessage = `📚 **Don't give up!** You scored **${finalScore} out of ${totalQuestions}** (${percentage}%). Learning takes time, and every attempt makes you stronger. Try this lesson again when you're ready!`;
+          }
+          
+          const passingNote = isPassing 
+            ? "\n\n✅ **Passing Grade Achieved!** (80% or higher)"
+            : "\n\n📝 **Note:** 80% is considered passing. You can retake this lesson anytime!";
+          
+          const scoreMessage = `${feedback}\n\n${gradeMessage}${passingNote}\n\n${lessonData.lessonCompletion}`;
           await simulateTyping(scoreMessage, ["Return to menu", "Ask a question"]);
         } else {
           stateRef.current.posttestIndex = nextIndex;
@@ -290,6 +415,7 @@ export const useGenericLesson = (lessonData: LessonData) => {
     setMessages([]);
     setQuickReplies([]);
     setHasStarted(false);
+    setCompletionData(null);
     stateRef.current = { ...initialState };
   }, []);
 
@@ -301,5 +427,6 @@ export const useGenericLesson = (lessonData: LessonData) => {
     startLesson,
     hasStarted,
     resetLesson,
+    completionData,
   };
 };
