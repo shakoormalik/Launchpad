@@ -1,7 +1,8 @@
 import { LessonInfo } from "@/data/lessons";
 import { LessonProgress } from "@/hooks/useProgressTracking";
 import { Button } from "@/components/ui/button";
-import { BookOpen, Clock, CheckCircle, Lock, Trophy, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Clock, Lock, Trophy, RefreshCw } from "lucide-react";
 
 interface LessonSelectorProps {
   lessons: LessonInfo[];
@@ -57,11 +58,17 @@ export const LessonSelector = ({
                   {isCompleted && (
                     isPassing ? (
                       <div className="flex items-center gap-1">
+                        <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                          Completed
+                        </Badge>
                         <Trophy className="w-4 h-4 text-primary flex-shrink-0" />
                         <span className="text-xs font-medium text-primary">{percentage}%</span>
                       </div>
                     ) : (
                       <div className="flex items-center gap-1">
+                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                          Completed
+                        </Badge>
                         <RefreshCw className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                         <span className="text-xs font-medium text-muted-foreground">{percentage}%</span>
                       </div>
