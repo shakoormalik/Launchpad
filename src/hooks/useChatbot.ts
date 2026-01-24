@@ -198,6 +198,7 @@ export const useChatbot = () => {
   const [isTyping, setIsTyping] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
+  const [completionData, setCompletionData] = useState<{ postTestScore: number; postTestTotal: number } | null>(null);
 
   const addMessage = useCallback((role: "user" | "mentor", content: string) => {
     const newMessage: Message = {
@@ -239,6 +240,7 @@ export const useChatbot = () => {
     // Check for restart
     if (content.toLowerCase().includes("restart")) {
       setCurrentStep(0);
+      setCompletionData(null);
       await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
       return;
     }
@@ -250,12 +252,18 @@ export const useChatbot = () => {
       
       const nextStep = lessonFlow[nextStepIndex];
       await simulateTyping(nextStep.mentorMessage, nextStep.quickReplies);
+      
+      // Mark as complete when reaching the final step (lesson 1 has no post-test, so we give 100%)
+      if (nextStepIndex === lessonFlow.length - 1) {
+        setCompletionData({ postTestScore: 1, postTestTotal: 1 });
+      }
     } else {
       // We're at the end, handle open questions
       const response = getOpenResponse(content);
       
       if (response === "RESTART") {
         setCurrentStep(0);
+        setCompletionData(null);
         await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
       } else {
         await simulateTyping(response, ["Tell me more", "Restart the lesson"]);
@@ -268,6 +276,7 @@ export const useChatbot = () => {
     setCurrentStep(0);
     setQuickReplies([]);
     setHasStarted(false);
+    setCompletionData(null);
   }, []);
 
   return {
@@ -278,5 +287,6 @@ export const useChatbot = () => {
     startLesson,
     hasStarted,
     resetLesson,
+    completionData,
   };
 };
