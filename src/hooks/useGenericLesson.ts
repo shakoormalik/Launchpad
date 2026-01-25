@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { generateTopicAnalogy, generateDiscussionResponse } from "@/data/topicAnalogies";
+import { generateTopicAnalogy } from "@/data/topicAnalogies";
 
 export interface Message {
   id: string;
@@ -50,7 +50,6 @@ type LessonPhase =
   | "pretest" 
   | "pretest-complete" 
   | "topic" 
-  | "topic-discussion" 
   | "topic-learn-more"
   | "posttest-intro" 
   | "posttest" 
@@ -64,7 +63,6 @@ interface LessonState {
   topicIndex: number;
   posttestIndex: number;
   posttestScore: number;
-  lastStudentResponse: string;
 }
 
 const initialState: LessonState = {
@@ -75,7 +73,6 @@ const initialState: LessonState = {
   topicIndex: 0,
   posttestIndex: 0,
   posttestScore: 0,
-  lastStudentResponse: "",
 };
 
 export interface LessonCompletionData {
@@ -191,7 +188,7 @@ export const useGenericLesson = (lessonData: LessonData) => {
         stateRef.current.pretestCorrect = 0;
         const firstQuestion = lessonData.preTest[0];
         const questionText = `**Question 1 of ${lessonData.preTest.length}:**\n\n${firstQuestion.question}`;
-        const replies = firstQuestion.options || ["Share your thoughts..."];
+        const replies = firstQuestion.options || [];
         await simulateTyping(questionText, replies);
         break;
       }
@@ -229,10 +226,10 @@ export const useGenericLesson = (lessonData: LessonData) => {
           
           await simulateTyping(`${encouragement}\n\n${lessonData.preTestComplete}`, ["Start learning!"]);
         } else {
-          stateRef.current.pretestIndex = nextIndex;
+        stateRef.current.pretestIndex = nextIndex;
           const nextQuestion = lessonData.preTest[nextIndex];
           const questionText = `**Question ${nextIndex + 1} of ${lessonData.preTest.length}:**\n\n${nextQuestion.question}`;
-          const replies = nextQuestion.options || ["Share your thoughts..."];
+          const replies = nextQuestion.options || [];
           await simulateTyping(questionText, replies);
         }
         break;
@@ -297,31 +294,6 @@ export const useGenericLesson = (lessonData: LessonData) => {
         break;
       }
 
-      case "topic-discussion": {
-        // Store response for contextual acknowledgment
-        stateRef.current.lastStudentResponse = content;
-        
-        // Move to next topic or post-test
-        const currentTopic = lessonData.topics[stateRef.current.topicIndex];
-        const nextTopicIndex = stateRef.current.topicIndex + 1;
-        
-        // Generate contextual acknowledgment
-        const acknowledgment = generateDiscussionResponse(currentTopic.title, content);
-        
-        if (nextTopicIndex >= lessonData.topics.length) {
-          // All topics done, move to post-test
-          stateRef.current.phase = "posttest-intro";
-          stateRef.current.topicIndex = nextTopicIndex;
-          await simulateTyping(`${acknowledgment}\n\n${lessonData.postTestIntro}`, ["Start the quiz!"]);
-        } else {
-          stateRef.current.phase = "topic";
-          stateRef.current.topicIndex = nextTopicIndex;
-          const nextTopic = lessonData.topics[nextTopicIndex];
-          const topicContent = formatTopicContent(nextTopic);
-          await simulateTyping(`${acknowledgment}\n\nLet's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
-        }
-        break;
-      }
 
       case "posttest-intro": {
         stateRef.current.phase = "posttest";
