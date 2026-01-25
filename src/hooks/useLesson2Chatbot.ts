@@ -106,22 +106,13 @@ export const useLesson2Chatbot = () => {
       case "pretest-intro":
         updateState({ phase: "pretest" });
         await simulateTyping(
-          `Question 1 of ${lesson2PreTest.length}:\n\n${lesson2PreTest[0].question}`,
-          ["Need a hint? 💡"]
+          `Question 1 of ${lesson2PreTest.length}:\n\n${lesson2PreTest[0].question}`
         );
         break;
         
       case "pretest": {
         const { pretestIndex, pretestResponses } = state;
         const currentQuestion = lesson2PreTest[pretestIndex];
-        
-        // Check if user asked for a hint
-        if (content.toLowerCase().includes("hint")) {
-          const hint = `Think about what you already know about "${currentQuestion.question.split(' ').slice(0, 5).join(' ')}..." - there's no wrong answer here, just share your thoughts!`;
-          await simulateTyping(`💡 **Hint:** ${hint}`, ["Need a hint? 💡"]);
-          break;
-        }
-        
         const newResponses = [...pretestResponses, content];
         
         await simulateTyping(currentQuestion.mentorAnswer);
@@ -132,8 +123,7 @@ export const useLesson2Chatbot = () => {
           
           await new Promise(resolve => setTimeout(resolve, 500));
           await simulateTyping(
-            `Question ${nextIndex + 1} of ${lesson2PreTest.length}:\n\n${lesson2PreTest[nextIndex].question}`,
-            ["Need a hint? 💡"]
+            `Question ${nextIndex + 1} of ${lesson2PreTest.length}:\n\n${lesson2PreTest[nextIndex].question}`
           );
         } else {
           updateState({ phase: "pretest-complete", pretestResponses: newResponses });
