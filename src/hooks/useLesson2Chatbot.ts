@@ -9,6 +9,7 @@ import {
   lesson2PostTest,
   lesson2Completion,
 } from "@/data/lesson2";
+import { generateTopicAnalogy } from "@/data/topicAnalogies";
 
 export interface Message {
   id: string;
@@ -22,6 +23,7 @@ type Lesson2Phase =
   | "pretest"
   | "pretest-complete"
   | "topic"
+  | "topic-learn-more"
   | "posttest-intro"
   | "posttest"
   | "complete";
@@ -133,27 +135,59 @@ export const useLesson2Chatbot = () => {
         break;
       }
         
-      case "pretest-complete":
+      case "pretest-complete": {
+        // Start first topic
+        const topic = lesson2Topics[0];
+        const topicContent = `📚 **Topic 1: ${topic.title}**\n\n${topic.content}\n\n💡 **Analogy:** ${topic.analogy}\n\n🎯 **Real-Life Scenario:** ${topic.scenario}`;
+        updateState({ phase: "topic", topicIndex: 0 });
+        await simulateTyping(topicContent, ["I understand, continue", "Learn More 💡"]);
+        break;
+      }
+      
       case "topic": {
         const { topicIndex } = stateRef.current;
         const topic = lesson2Topics[topicIndex];
         
-        const topicContent = `Topic ${topicIndex + 1}: ${topic.title}\n\n${topic.content}\n\nAnalogy: ${topic.analogy}\n\nReal-Life Scenario: ${topic.scenario}`;
-        await simulateTyping(topicContent);
+        // Check if they want to learn more
+        if (content.toLowerCase().includes("learn more") || content.toLowerCase().includes("more")) {
+          updateState({ phase: "topic-learn-more" });
+          const analogy = generateTopicAnalogy(topic.title, topic.content);
+          
+          const expandedContent = `💡 **Let's Make This Real!**\n\n**Analogy:** ${analogy.analogy}\n\n**Real-World Example:** ${analogy.realWorldExample}${analogy.funFact ? `\n\n🎯 **Fun Fact:** ${analogy.funFact}` : ""}`;
+          
+          await simulateTyping(expandedContent, ["Got it! Continue", "That helps!"]);
+        } else {
+          // Move to next topic or post-test
+          if (topicIndex < lesson2Topics.length - 1) {
+            const nextIndex = topicIndex + 1;
+            updateState({ phase: "topic", topicIndex: nextIndex });
+            
+            const nextTopic = lesson2Topics[nextIndex];
+            const topicContent = `📚 **Topic ${nextIndex + 1}: ${nextTopic.title}**\n\n${nextTopic.content}\n\n💡 **Analogy:** ${nextTopic.analogy}\n\n🎯 **Real-Life Scenario:** ${nextTopic.scenario}`;
+            
+            await simulateTyping(`Great! Let's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
+          } else {
+            updateState({ phase: "posttest-intro" });
+            await simulateTyping(postTestIntro, ["Start the quiz!"]);
+          }
+        }
+        break;
+      }
+      
+      case "topic-learn-more": {
+        // Move to next topic or post-test after expanded content
+        const { topicIndex } = stateRef.current;
         
-        // Move to next topic or post-test directly
         if (topicIndex < lesson2Topics.length - 1) {
           const nextIndex = topicIndex + 1;
           updateState({ phase: "topic", topicIndex: nextIndex });
           
-          await new Promise(resolve => setTimeout(resolve, 500));
-          await simulateTyping(
-            `Ready for the next topic? Let's move on to Topic ${nextIndex + 1}!`,
-            ["Continue"]
-          );
+          const nextTopic = lesson2Topics[nextIndex];
+          const topicContent = `📚 **Topic ${nextIndex + 1}: ${nextTopic.title}**\n\n${nextTopic.content}\n\n💡 **Analogy:** ${nextTopic.analogy}\n\n🎯 **Real-Life Scenario:** ${nextTopic.scenario}`;
+          
+          await simulateTyping(`Great! Let's move on to the next topic!\n\n${topicContent}`, ["I understand, continue", "Learn More 💡"]);
         } else {
           updateState({ phase: "posttest-intro" });
-          await new Promise(resolve => setTimeout(resolve, 500));
           await simulateTyping(postTestIntro, ["Start the quiz!"]);
         }
         break;
