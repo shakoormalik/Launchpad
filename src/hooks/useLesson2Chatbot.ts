@@ -22,7 +22,6 @@ type Lesson2Phase =
   | "pretest"
   | "pretest-complete"
   | "topic"
-  | "topic-discussion"
   | "posttest-intro"
   | "posttest"
   | "complete";
@@ -107,8 +106,7 @@ export const useLesson2Chatbot = () => {
       case "pretest-intro":
         updateState({ phase: "pretest" });
         await simulateTyping(
-          `Question 1 of ${lesson2PreTest.length}:\n\n${lesson2PreTest[0].question}`,
-          ["I'm not sure", "Let me think..."]
+          `Question 1 of ${lesson2PreTest.length}:\n\n${lesson2PreTest[0].question}`
         );
         break;
         
@@ -125,8 +123,7 @@ export const useLesson2Chatbot = () => {
           
           await new Promise(resolve => setTimeout(resolve, 500));
           await simulateTyping(
-            `Question ${nextIndex + 1} of ${lesson2PreTest.length}:\n\n${lesson2PreTest[nextIndex].question}`,
-            ["I'm not sure", "Can you give me a hint?"]
+            `Question ${nextIndex + 1} of ${lesson2PreTest.length}:\n\n${lesson2PreTest[nextIndex].question}`
           );
         } else {
           updateState({ phase: "pretest-complete", pretestResponses: newResponses });
@@ -144,28 +141,7 @@ export const useLesson2Chatbot = () => {
         const topicContent = `Topic ${topicIndex + 1}: ${topic.title}\n\n${topic.content}\n\nAnalogy: ${topic.analogy}\n\nReal-Life Scenario: ${topic.scenario}`;
         await simulateTyping(topicContent);
         
-        await new Promise(resolve => setTimeout(resolve, 800));
-        updateState({ phase: "topic-discussion" });
-        await simulateTyping(
-          `Let's discuss:\n\n${topic.discussionQuestion}`,
-          ["Share my thoughts", "I need to think about it", "Can you explain more?"]
-        );
-        break;
-      }
-        
-      case "topic-discussion": {
-        const { topicIndex } = state;
-        const encouragements = [
-          "Great insight! That shows you're really thinking about this.",
-          "I love that perspective! You're connecting the dots.",
-          "Excellent thinking! That's exactly the kind of awareness that leads to success.",
-          "Well said! You're already developing a mature mindset about finances.",
-          "That's a thoughtful response! Keep that mindset as you grow.",
-          "You're getting it! This kind of thinking will serve you well."
-        ];
-        
-        await simulateTyping(encouragements[topicIndex % encouragements.length]);
-        
+        // Move to next topic or post-test directly
         if (topicIndex < lesson2Topics.length - 1) {
           const nextIndex = topicIndex + 1;
           updateState({ phase: "topic", topicIndex: nextIndex });
@@ -173,12 +149,12 @@ export const useLesson2Chatbot = () => {
           await new Promise(resolve => setTimeout(resolve, 500));
           await simulateTyping(
             `Ready for the next topic? Let's move on to Topic ${nextIndex + 1}!`,
-            ["Continue", "Let me catch my breath first"]
+            ["Continue"]
           );
         } else {
           updateState({ phase: "posttest-intro" });
           await new Promise(resolve => setTimeout(resolve, 500));
-          await simulateTyping(postTestIntro, ["I'm ready for the quiz!", "Let me review first"]);
+          await simulateTyping(postTestIntro, ["Start the quiz!"]);
         }
         break;
       }
