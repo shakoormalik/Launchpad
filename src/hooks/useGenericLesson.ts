@@ -127,6 +127,23 @@ export const useGenericLesson = (lessonData: LessonData) => {
     return content;
   };
 
+  const generateHint = (question: PreTestQuestion): string => {
+    // Generate a hint based on the correct answer without giving it away
+    if (question.options && question.correctAnswer !== undefined) {
+      const correctAnswer = typeof question.correctAnswer === 'number' 
+        ? question.options[question.correctAnswer] 
+        : String(question.correctAnswer);
+      
+      // Create a hint by focusing on key concepts
+      const keywords = correctAnswer.split(' ').filter(word => word.length > 4);
+      if (keywords.length > 0) {
+        return `Think about what's most important here. The answer relates to "${keywords[0].toLowerCase()}..." - consider which option best reflects that idea.`;
+      }
+      return `Read each option carefully. One of them focuses on the most essential or fundamental concept. Which one makes the most sense for your daily life?`;
+    }
+    return `Take your time and think about what you already know. Trust your instincts!`;
+  };
+
   const checkPreTestAnswer = (userAnswer: string, question: PreTestQuestion): boolean => {
     if (!question.correctAnswer) return false;
     
@@ -188,13 +205,22 @@ export const useGenericLesson = (lessonData: LessonData) => {
         stateRef.current.pretestCorrect = 0;
         const firstQuestion = lessonData.preTest[0];
         const questionText = `**Question 1 of ${lessonData.preTest.length}:**\n\n${firstQuestion.question}`;
-        const replies = firstQuestion.options || [];
+        const replies = firstQuestion.options ? [...firstQuestion.options, "Need a hint? 💡"] : ["Need a hint? 💡"];
         await simulateTyping(questionText, replies);
         break;
       }
 
       case "pretest": {
         const currentQuestion = lessonData.preTest[stateRef.current.pretestIndex];
+        
+        // Check if user asked for a hint
+        if (content.toLowerCase().includes("hint")) {
+          const hint = generateHint(currentQuestion);
+          const replies = currentQuestion.options ? [...currentQuestion.options] : [];
+          await simulateTyping(`💡 **Hint:** ${hint}`, replies);
+          break;
+        }
+        
         stateRef.current.pretestResponses.push(content);
         
         // Track correct answers silently (no feedback shown)
@@ -226,10 +252,10 @@ export const useGenericLesson = (lessonData: LessonData) => {
           
           await simulateTyping(`${encouragement}\n\n${lessonData.preTestComplete}`, ["Start learning!"]);
         } else {
-        stateRef.current.pretestIndex = nextIndex;
+          stateRef.current.pretestIndex = nextIndex;
           const nextQuestion = lessonData.preTest[nextIndex];
           const questionText = `**Question ${nextIndex + 1} of ${lessonData.preTest.length}:**\n\n${nextQuestion.question}`;
-          const replies = nextQuestion.options || [];
+          const replies = nextQuestion.options ? [...nextQuestion.options, "Need a hint? 💡"] : ["Need a hint? 💡"];
           await simulateTyping(questionText, replies);
         }
         break;
