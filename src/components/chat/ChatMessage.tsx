@@ -10,6 +10,19 @@ interface ChatMessageProps {
 export const ChatMessage = ({ role, content, isTyping }: ChatMessageProps) => {
   const isMentor = role === "mentor";
 
+  const formatContent = (text: string) => {
+    // Split by **text** pattern
+    const parts = text.split(/(\*\*.*?\*\*)/g);
+
+    return parts.map((part, index) => {
+      if (part.startsWith("**") && part.endsWith("**")) {
+        // Remove asterisks and render bold
+        return <strong key={index} className="font-bold">{part.slice(2, -2)}</strong>;
+      }
+      return <span key={index}>{part}</span>;
+    });
+  };
+
   return (
     <div
       className={cn(
@@ -22,7 +35,7 @@ export const ChatMessage = ({ role, content, isTyping }: ChatMessageProps) => {
           <Rocket className="w-5 h-5 text-primary-foreground" />
         </div>
       )}
-      
+
       <div
         className={cn(
           "max-w-[80%] px-4 py-3 rounded-2xl",
@@ -38,7 +51,7 @@ export const ChatMessage = ({ role, content, isTyping }: ChatMessageProps) => {
             <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-typing" style={{ animationDelay: "400ms" }} />
           </div>
         ) : (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{content}</p>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatContent(content)}</p>
         )}
       </div>
 
