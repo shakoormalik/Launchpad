@@ -34,22 +34,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     useEffect(() => {
         // Helper for timeouts
-        const withTimeout = <T>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
-            const timeout = new Promise<never>((_, reject) => 
-                 setTimeout(() => reject(new Error(`${label} timed out`)), ms)
-                );
-                return Promise.race([promise, timeout]);
+        const withTimeout = <T,>(promise: Promise<T>, ms: number, label: string): Promise<T> => {
+            const timeout = new Promise<never>((_, reject) =>
+                setTimeout(() => reject(new Error(`${label} timed out`)), ms)
+            );
+            return Promise.race([promise, timeout]);
         };
 
         // Get initial session
         const initSession = async () => {
-                    console.log("AuthContext: initSession started");
-                try {
+            console.log("AuthContext: initSession started");
+            try {
                 // Wrap getSession in timeout
-                const {data: {session} } = await withTimeout(
-                supabase.auth.getSession(),
-                5000,
-                "getSession"
+                const { data: { session } } = await withTimeout(
+                    supabase.auth.getSession(),
+                    5000,
+                    "getSession"
                 );
 
                 console.log("AuthContext: session retrieved", !!session);
@@ -57,8 +57,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 setUser(session?.user ?? null);
                 if (session?.user) {
                     console.log("AuthContext: fetching profile for", session.user.id);
-                await withTimeout(fetchProfile(session.user.id), 5000, "fetchProfile");
-                console.log("AuthContext: profile fetched in initSession");
+                    await withTimeout(fetchProfile(session.user.id), 5000, "fetchProfile");
+                    console.log("AuthContext: profile fetched in initSession");
                 } else {
                     console.log("AuthContext: no user in session");
                 }
@@ -69,71 +69,71 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                     console.warn("AuthContext: Initialization timed out, forcing load completion");
                 }
             } finally {
-                    console.log("AuthContext: initSession finally - setLoading(false)");
+                console.log("AuthContext: initSession finally - setLoading(false)");
                 setLoading(false);
             }
         };
 
-                // Listen for auth changes
-                const {data: {subscription} } = supabase.auth.onAuthStateChange(async (event, session) => {
-                    console.log("AuthContext: onAuthStateChange event:", event);
-                setSession(session);
-                setUser(session?.user ?? null);
+        // Listen for auth changes
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log("AuthContext: onAuthStateChange event:", event);
+            setSession(session);
+            setUser(session?.user ?? null);
 
-                if (session?.user) {
-                    console.log("AuthContext: onAuthStateChange fetching profile...");
+            if (session?.user) {
+                console.log("AuthContext: onAuthStateChange fetching profile...");
                 try {
                     await withTimeout(fetchProfile(session.user.id), 5000, "fetchProfileListener");
-                console.log("AuthContext: onAuthStateChange profile fetched");
+                    console.log("AuthContext: onAuthStateChange profile fetched");
                 } catch (e) {
                     console.error("AuthContext: Profile fetch in listener failed/timedout", e);
                 }
             } else {
-                    setProfile(null);
+                setProfile(null);
             }
 
-                console.log("AuthContext: onAuthStateChange setting loading false");
-                setLoading(false);
+            console.log("AuthContext: onAuthStateChange setting loading false");
+            setLoading(false);
         });
 
-                // Start initSession apart from the listener setup
-                initSession();
+        // Start initSession apart from the listener setup
+        initSession();
 
         return () => subscription.unsubscribe();
     }, []);
 
     const fetchProfile = async (userId: string) => {
         try {
-            const {data, error} = await supabase
+            const { data, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single();
 
-                if (error) {
-                    console.error("Error fetching profile:", error);
+            if (error) {
+                console.error("Error fetching profile:", error);
             } else {
-                    setProfile(data as Profile);
+                setProfile(data as Profile);
             }
         } catch (error: any) {
             if (error.name === 'AbortError') return;
-                console.error("Unexpected error fetching profile:", error);
+            console.error("Unexpected error fetching profile:", error);
         }
     };
 
     const signOut = async () => {
-                    await supabase.auth.signOut();
+        await supabase.auth.signOut();
     };
 
     const refreshProfile = async () => {
         if (session?.user) {
-                    await fetchProfile(session.user.id);
+            await fetchProfile(session.user.id);
         }
     };
 
-                return (
-                <AuthContext.Provider value={{ session, user, profile, loading, signOut, refreshProfile }}>
-                    {children}
-                </AuthContext.Provider>
-                );
+    return (
+        <AuthContext.Provider value={{ session, user, profile, loading, signOut, refreshProfile }}>
+            {children}
+        </AuthContext.Provider>
+    );
 };
