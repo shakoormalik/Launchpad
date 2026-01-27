@@ -320,6 +320,7 @@ export const useLesson2Chatbot = (lessonId?: string) => {
           const percentage = Math.round((finalScore / lesson2PostTest.length) * 100);
 
           updateState({ phase: "complete", posttestScore: finalScore });
+          setCompletionData({ postTestScore: finalScore, postTestTotal: lesson2PostTest.length });
 
           await new Promise(resolve => setTimeout(resolve, 500));
 
