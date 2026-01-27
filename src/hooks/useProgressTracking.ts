@@ -100,6 +100,9 @@ export const useProgressTracking = () => {
 
     // Save to Supabase
     try {
+      // Calculate percentage for DB storage (since we assume 100 base on fetch)
+      const scorePercentage = Math.round((postTestScore / postTestTotal) * 100);
+
       // Emergency: Ensure profile exists to prevent "violates foreign key constraint" error
       // This happens if the profile wasn't created during signup (e.g. network error)
       const { error: profileError } = await supabase
@@ -124,7 +127,7 @@ export const useProgressTracking = () => {
           user_id: user.id,
           lesson_id: lessonId,
           status: 'completed',
-          score_post: postTestScore,
+          score_post: scorePercentage, // Saving as percentage
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id,lesson_id'
