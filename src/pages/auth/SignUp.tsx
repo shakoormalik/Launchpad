@@ -68,7 +68,6 @@ export default function SignUp() {
     };
 
     return (
-    return (
         <div className="w-full lg:grid lg:min-h-screen lg:grid-cols-2">
             <div className="hidden bg-muted lg:block">
                 <div className="h-full w-full object-cover bg-slate-900 relative flex flex-col items-center justify-center p-12 text-center">
