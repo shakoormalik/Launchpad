@@ -1,5 +1,8 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { generateTopicAnalogy } from "@/data/topicAnalogies";
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
 
 export interface Message {
   id: string;
@@ -81,14 +84,97 @@ export interface LessonCompletionData {
   postTestTotal: number;
 }
 
-export const useGenericLesson = (lessonData: LessonData) => {
+export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
   const [completionData, setCompletionData] = useState<LessonCompletionData | null>(null);
+  const [isLoadingState, setIsLoadingState] = useState(false);
 
   const stateRef = useRef<LessonState>({ ...initialState });
+
+  // Load saved state on mount
+  useEffect(() => {
+    if (!user || !lessonId) return;
+
+    const loadState = async () => {
+      setIsLoadingState(true);
+      try {
+        const { data, error } = await supabase
+          .from('lesson_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId)
+          .single();
+
+        if (error && error.code !== 'PGRST116') { // PGRST116 is "no rows returned"
+          console.error("Error loading lesson state:", error);
+          return;
+        }
+
+        if (data) {
+          // Restore state
+          const savedState = data.state as LessonState;
+          const savedMessages = data.messages as Message[];
+
+          if (savedState && savedMessages && savedMessages.length > 0) {
+            stateRef.current = savedState;
+            setMessages(savedMessages);
+            setHasStarted(true);
+
+            // Restore completion data if finished
+            if (savedState.phase === 'complete') {
+              const total = lessonData.postTest.length;
+              const score = savedState.posttestScore;
+              setCompletionData({ postTestScore: score, postTestTotal: total });
+            }
+
+            toast.success("Resumed from where you left off!");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load state:", err);
+      } finally {
+        setIsLoadingState(false);
+      }
+    };
+
+    loadState();
+  }, [user, lessonId, lessonData.postTest.length]);
+
+  // Save state on changes
+  const saveProgress = useCallback(async () => {
+    if (!user || !lessonId || !hasStarted) return;
+
+    // Don't save if in intro phase with no messages
+    if (stateRef.current.phase === 'intro' && messages.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('lesson_states')
+        .upsert({
+          user_id: user.id,
+          lesson_id: lessonId,
+          state: stateRef.current as any, // Cast to any for jsonb compatibility
+          messages: messages as any,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,lesson_id' });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Error saving lesson state:", err);
+    }
+  }, [user, lessonId, messages, hasStarted]);
+
+  // Debounced save
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveProgress();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [saveProgress]);
 
   const addMessage = useCallback((role: "user" | "mentor", content: string) => {
     const newMessage: Message = {
@@ -436,13 +522,31 @@ export const useGenericLesson = (lessonData: LessonData) => {
     return false;
   }, [addMessage, lessonData, simulateTyping]);
 
-  const resetLesson = useCallback(() => {
+  const resetLesson = useCallback(async () => {
     setMessages([]);
     setQuickReplies([]);
     setHasStarted(false);
     setCompletionData(null);
     stateRef.current = { ...initialState };
+    // Removed DB purge to fix "Back button wipes progress" bug
   }, []);
+
+  const deleteProgress = useCallback(async () => {
+    if (user && lessonId) {
+      try {
+        await supabase
+          .from('lesson_states')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId);
+
+        toast.info("Progress cleared");
+        resetLesson();
+      } catch (err) {
+        console.error("Error clearing state:", err);
+      }
+    }
+  }, [user, lessonId, resetLesson]);
 
   return {
     messages,
@@ -453,5 +557,7 @@ export const useGenericLesson = (lessonData: LessonData) => {
     hasStarted,
     resetLesson,
     completionData,
+    isLoadingState,
+    deleteProgress,
   };
 };

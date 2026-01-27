@@ -11,9 +11,9 @@ interface LessonSelectorProps {
   lessonProgress?: Map<string, LessonProgress>;
 }
 
-export const LessonSelector = ({ 
-  lessons, 
-  onSelectLesson, 
+export const LessonSelector = ({
+  lessons,
+  onSelectLesson,
   completedLessons = [],
   lessonProgress = new Map()
 }: LessonSelectorProps) => {
@@ -22,27 +22,28 @@ export const LessonSelector = ({
       <h3 className="text-lg font-semibold text-center text-foreground mb-4">
         Choose a Lesson
       </h3>
-      
+
       {lessons.map((lesson) => {
         const isCompleted = completedLessons.includes(lesson.id);
         const progress = lessonProgress.get(lesson.id);
-        const percentage = progress 
+        const percentage = progress
           ? Math.round((progress.postTestScore / progress.postTestTotal) * 100)
           : null;
         const isPassing = percentage !== null && percentage >= 80;
-        
+
+        const isLesson1 = lesson.id === "earning-money";
+
         return (
           <div
             key={lesson.id}
-            className={`relative rounded-xl border-2 transition-all overflow-hidden ${
-              lesson.isAvailable 
-                ? isCompleted 
-                  ? isPassing
-                    ? "border-primary/50 bg-primary/5 hover:border-primary hover:shadow-md cursor-pointer"
-                    : "border-accent/50 bg-accent/5 hover:border-accent hover:shadow-md cursor-pointer"
-                  : "border-border hover:border-primary/50 hover:shadow-md cursor-pointer" 
-                : "border-muted opacity-60"
-            }`}
+            className={`relative rounded-xl border-2 transition-all overflow-hidden ${lesson.isAvailable
+              ? isCompleted
+                ? (isPassing || isLesson1)
+                  ? "border-primary/50 bg-primary/5 hover:border-primary hover:shadow-md cursor-pointer"
+                  : "border-accent/50 bg-accent/5 hover:border-accent hover:shadow-md cursor-pointer"
+                : "border-border hover:border-primary/50 hover:shadow-md cursor-pointer"
+              : "border-muted opacity-60"
+              }`}
           >
             <Button
               variant="ghost"
@@ -56,18 +57,22 @@ export const LessonSelector = ({
                     Lesson {lesson.number}
                   </span>
                   {isCompleted && (
-                    isPassing ? (
+                    (isPassing || isLesson1) ? (
                       <div className="flex items-center gap-1">
-                        <Badge variant="default" className="text-[10px] px-1.5 py-0">
+                        <Badge variant="default" className="text-[10px] px-1.5 py-0 bg-primary hover:bg-primary/90">
                           Completed
                         </Badge>
-                        <Trophy className="w-4 h-4 text-primary flex-shrink-0" />
-                        <span className="text-xs font-medium text-primary">{percentage}%</span>
+                        {!isLesson1 && (
+                          <>
+                            <Trophy className="w-4 h-4 text-primary flex-shrink-0" />
+                            <span className="text-xs font-medium text-primary">{percentage}%</span>
+                          </>
+                        )}
                       </div>
                     ) : (
                       <div className="flex items-center gap-1">
-                        <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
-                          Completed
+                        <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                          Try Again
                         </Badge>
                         <RefreshCw className="w-3 h-3 text-muted-foreground flex-shrink-0" />
                         <span className="text-xs font-medium text-muted-foreground">{percentage}%</span>
@@ -89,25 +94,25 @@ export const LessonSelector = ({
                   )}
                 </div>
               </div>
-              
+
               <h4 className="font-semibold text-foreground text-base break-words w-full">
                 {lesson.title}
               </h4>
-              
+
               <p className="text-sm text-muted-foreground line-clamp-2 break-words w-full">
                 {lesson.description}
               </p>
-              
-              {isCompleted && !isPassing && (
+
+              {isCompleted && !isPassing && !isLesson1 && (
                 <p className="text-xs text-accent-foreground/70 italic">
                   💪 Try again to reach 80% passing!
                 </p>
               )}
-              
+
               {lesson.isAvailable && lesson.topics.length > 0 && !isCompleted && (
                 <div className="flex flex-wrap gap-1 mt-1 w-full">
                   {lesson.topics.slice(0, 2).map((topic, idx) => (
-                    <span 
+                    <span
                       key={idx}
                       className="text-xs bg-secondary/50 text-secondary-foreground px-2 py-0.5 rounded truncate max-w-[140px] sm:max-w-none"
                     >

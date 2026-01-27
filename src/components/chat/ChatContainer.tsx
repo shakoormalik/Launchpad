@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { useAuth } from "@/contexts/AuthContext";
 import { ChatHeader } from "./ChatHeader";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
@@ -18,22 +19,25 @@ import launchpadLogo from "@/assets/launchpad-logo.png";
 type ViewState = "menu" | string; // "menu" or lessonId
 
 export const ChatContainer = () => {
+  const { profile } = useAuth();
   const [viewState, setViewState] = useState<ViewState>("menu");
   const [activeLessonId, setActiveLessonId] = useState<string | null>(null);
-  
+  const lastRecordedCompletionId = useRef<string | null>(null);
+
   // Progress tracking
-  const { 
-    progress, 
-    recordLessonCompletion, 
+  const {
+    progress,
+    loading: progressLoading,
+    recordLessonCompletion,
     getLessonProgress,
     getOverallGrade,
-    getEncouragementMessage 
+    getEncouragementMessage
   } = useProgressTracking();
-  
+
   // Legacy hooks for Lesson 1 and 2
-  const lesson1 = useChatbot();
-  const lesson2 = useLesson2Chatbot();
-  
+  const lesson1 = useChatbot(activeLessonId === "earning-money" ? "earning-money" : undefined);
+  const lesson2 = useLesson2Chatbot(activeLessonId === "living-on-your-own" ? "living-on-your-own" : undefined);
+
   // Get lesson data for generic lessons
   const genericLessonData = useMemo(() => {
     if (activeLessonId && isGenericLesson(activeLessonId)) {
@@ -41,19 +45,22 @@ export const ChatContainer = () => {
     }
     return null;
   }, [activeLessonId]);
-  
+
   // Generic lesson hook - always called but only used for generic lessons
-  const genericLesson = useGenericLesson(genericLessonData || {
-    lessonIntroduction: "",
-    preTestIntro: "",
-    preTest: [],
-    preTestComplete: "",
-    topics: [],
-    postTestIntro: "",
-    postTest: [],
-    lessonCompletion: "",
-  });
-  
+  const genericLesson = useGenericLesson(
+    genericLessonData || {
+      lessonIntroduction: "",
+      preTestIntro: "",
+      preTest: [],
+      preTestComplete: "",
+      topics: [],
+      postTestIntro: "",
+      postTest: [],
+      lessonCompletion: "",
+    },
+    activeLessonId || undefined
+  );
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Get completed lessons from progress
@@ -95,6 +102,14 @@ export const ChatContainer = () => {
   // Track completion when genericLesson completes
   useEffect(() => {
     if (genericLesson.completionData && activeLessonId) {
+      const completionId = `${activeLessonId}-${genericLesson.completionData.postTestScore}-${genericLesson.completionData.postTestTotal}`;
+
+      if (lastRecordedCompletionId.current === completionId) {
+        console.log("ChatContainer: Progress already recorded for this session");
+        return;
+      }
+
+      lastRecordedCompletionId.current = completionId;
       recordLessonCompletion(
         activeLessonId,
         genericLesson.completionData.postTestScore,
@@ -114,10 +129,21 @@ export const ChatContainer = () => {
     }
   }, [lesson1.completionData, viewState, recordLessonCompletion]);
 
+  // Track completion for Lesson 2
+  useEffect(() => {
+    if (lesson2.completionData && viewState === "living-on-your-own") {
+      recordLessonCompletion(
+        "living-on-your-own",
+        lesson2.completionData.postTestScore,
+        lesson2.completionData.postTestTotal
+      );
+    }
+  }, [lesson2.completionData, viewState, recordLessonCompletion]);
+
   const handleSelectLesson = useCallback((lessonId: string) => {
     setActiveLessonId(lessonId);
     setViewState(lessonId);
-    
+
     // Reset the appropriate lesson hook
     if (isGenericLesson(lessonId)) {
       genericLesson.resetLesson();
@@ -128,7 +154,7 @@ export const ChatContainer = () => {
     const currentLessonId = viewState;
     setViewState("menu");
     setActiveLessonId(null);
-    
+
     // Reset the current lesson
     if (currentLessonId === "earning-money") {
       lesson1.resetLesson();
@@ -173,38 +199,44 @@ export const ChatContainer = () => {
     return (
       <div className="flex flex-col h-screen max-h-screen bg-background">
         <ChatHeader />
-        
+
         <div className="flex-1 overflow-y-auto p-4 pt-6 flex flex-col items-center justify-start">
           <div className="flex flex-col items-center justify-center animate-fade-in py-8 max-w-lg w-full">
-            <img 
-              src={launchpadLogo} 
-              alt="LaunchPad Financial Literacy Series" 
+            <img
+              src={launchpadLogo}
+              alt="LaunchPad Financial Literacy Series"
               className="h-20 w-auto mb-6"
             />
-            
+
             <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
-              Welcome to LaunchPad!
+              Welcome to LaunchPad{profile?.first_name ? `, ${profile.first_name}` : ""}!
             </h2>
             <p className="text-muted-foreground text-center max-w-sm mb-6">
               Your journey to financial literacy starts here. Choose a lesson to begin learning!
             </p>
-            
+
             {/* Progress Dashboard */}
-            <ProgressDashboard
-              lessonsCompleted={overallGrade.lessonsCompleted}
-              totalLessons={lessons.filter(l => l.isAvailable).length}
-              overallGrade={overallGrade.percentage}
-              isPassing={overallGrade.isPassing}
-              encouragementMessage={encouragementMessage}
-            />
-            
-            <LessonSelector 
-              lessons={lessons} 
+            {progressLoading ? (
+              <div className="w-full max-w-md h-32 mb-6 flex items-center justify-center bg-muted/20 rounded-xl animate-pulse">
+                <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+              </div>
+            ) : (
+              <ProgressDashboard
+                lessonsCompleted={overallGrade.lessonsCompleted}
+                totalLessons={lessons.filter(l => l.isAvailable).length}
+                overallGrade={overallGrade.percentage}
+                isPassing={overallGrade.isPassing}
+                encouragementMessage={encouragementMessage}
+              />
+            )}
+
+            <LessonSelector
+              lessons={lessons}
               onSelectLesson={handleSelectLesson}
               completedLessons={completedLessons}
               lessonProgress={lessonProgressMap}
             />
-            
+
             <p className="text-xs text-muted-foreground mt-6 text-center max-w-xs">
               This is part of the LaunchPad Financial Literacy program, designed to help students learn independently.
             </p>
@@ -224,7 +256,7 @@ export const ChatContainer = () => {
   return (
     <div className="flex flex-col h-screen max-h-screen bg-background">
       <ChatHeader />
-      
+
       <div className="flex-1 overflow-y-auto p-4 pt-6 space-y-4">
         {!lessonData.hasStarted ? (
           <div className="flex flex-col items-center justify-center min-h-[60vh] animate-fade-in py-8">
@@ -237,33 +269,43 @@ export const ChatContainer = () => {
               <ArrowLeft className="w-4 h-4 mr-1" />
               Back to Lessons
             </Button>
-            
-            <img 
-              src={launchpadLogo} 
-              alt="LaunchPad Financial Literacy Series" 
+
+            <img
+              src={launchpadLogo}
+              alt="LaunchPad Financial Literacy Series"
               className="h-20 w-auto mb-6"
             />
-            
+
             <span className="text-xs font-medium bg-primary/10 text-primary px-3 py-1 rounded-full mb-3">
               Lesson {lessonNumber}
             </span>
-            
+
             <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
               {lessonTitle}
             </h2>
             <p className="text-muted-foreground text-center max-w-sm mb-6">
               {lessonDescription}
             </p>
-            
-            <Button 
+
+            <Button
               onClick={lessonData.startLesson}
               size="lg"
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-6 rounded-xl shadow-soft transition-all hover:scale-105 active:scale-95"
+              disabled={lessonData.isLoadingState}
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-8 py-6 rounded-xl shadow-soft transition-all hover:scale-105 active:scale-95 disabled:opacity-70 disabled:cursor-not-allowed"
             >
-              <Rocket className="w-5 h-5 mr-2" />
-              Start the Lesson
+              {lessonData.isLoadingState ? (
+                <>
+                  <div className="h-5 w-5 border-2 border-white/50 border-t-white rounded-full animate-spin mr-2" />
+                  Checking for saved progress...
+                </>
+              ) : (
+                <>
+                  <Rocket className="w-5 h-5 mr-2" />
+                  Start the Lesson
+                </>
+              )}
             </Button>
-            
+
             <p className="text-xs text-muted-foreground mt-4 text-center max-w-xs">
               This is part of the LaunchPad Financial Literacy program
             </p>
@@ -279,7 +321,7 @@ export const ChatContainer = () => {
               <ArrowLeft className="w-4 h-4 mr-1" />
               Back to Lessons
             </Button>
-            
+
             {lessonData.messages.map((message) => (
               <ChatMessage
                 key={message.id}
@@ -287,16 +329,16 @@ export const ChatContainer = () => {
                 content={message.content}
               />
             ))}
-            
+
             {lessonData.isTyping && (
               <ChatMessage role="mentor" content="" isTyping />
             )}
-            
+
             <div ref={messagesEndRef} />
           </>
         )}
       </div>
-      
+
       {lessonData.hasStarted && (
         <>
           <QuickReplies options={lessonData.quickReplies} onSelect={handleSendMessage} />

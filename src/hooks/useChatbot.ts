@@ -135,11 +135,11 @@ Feel free to ask me any questions about earning money, or type "restart" to go t
 // Open-ended response handler for questions
 const getOpenResponse = (question: string): string => {
   const q = question.toLowerCase();
-  
+
   if (q.includes("restart")) {
     return "RESTART";
   }
-  
+
   if (q.includes("jobs") && q.includes("pay")) {
     return `Great question! 💰
 
@@ -155,7 +155,7 @@ But here's the key: high-paying jobs usually require investment in yourself—wh
 
 What matters most is finding something that matches your interests AND has good earning potential. What field interests you?`;
   }
-  
+
   if (q.includes("business") || q.includes("start")) {
     return `Love the entrepreneurial spirit! 🚀
 
@@ -171,7 +171,7 @@ Ideas to start with: lawn care, tutoring, pet sitting, handmade crafts, social m
 
 The best part? You learn SO much by doing it—even if it's small! What kind of business idea interests you?`;
   }
-  
+
   if (q.includes("save") || q.includes("saving")) {
     return `Saving is super important! 🏦
 
@@ -184,7 +184,7 @@ Even if you're only earning a little right now, building the habit of saving som
 
 Want to know more about budgeting or investing?`;
   }
-  
+
   return `That's a thoughtful question! 🤔
 
 While I'm focused on the basics of earning money in this demo lesson, the full LaunchPad program covers many more topics like budgeting, saving, investing, and financial planning.
@@ -192,13 +192,107 @@ While I'm focused on the basics of earning money in this demo lesson, the full L
 Is there anything specific about earning money I can help clarify? Or would you like to restart the lesson?`;
 };
 
-export const useChatbot = () => {
+import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "sonner";
+import { useEffect, useRef } from "react";
+
+export const useChatbot = (lessonId?: string) => {
+  const { user } = useAuth();
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentStep, setCurrentStep] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
   const [quickReplies, setQuickReplies] = useState<string[]>([]);
   const [hasStarted, setHasStarted] = useState(false);
   const [completionData, setCompletionData] = useState<{ postTestScore: number; postTestTotal: number } | null>(null);
+  const [isLoadingState, setIsLoadingState] = useState(false);
+
+  // We need a ref to track state for saving, similar to other hooks
+  // Since this legacy hook uses multiple state variables, we'll sync them to a ref for the saver
+  const stateRef = useRef({
+    currentStep: 0,
+    hasStarted: false,
+    completionData: null as { postTestScore: number; postTestTotal: number } | null
+  });
+
+  // Sync ref with state
+  useEffect(() => {
+    stateRef.current = { currentStep, hasStarted, completionData };
+  }, [currentStep, hasStarted, completionData]);
+
+  // Load saved state on mount
+  useEffect(() => {
+    if (!user || !lessonId) return;
+
+    const loadState = async () => {
+      setIsLoadingState(true);
+      try {
+        const { data, error } = await supabase
+          .from('lesson_states')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId)
+          .single();
+
+        if (error && error.code !== 'PGRST116') {
+          console.error("Error loading lesson state:", error);
+          return;
+        }
+
+        if (data) {
+          const savedState = data.state as any;
+          const savedMessages = data.messages as Message[];
+
+          if (savedState && savedMessages && savedMessages.length > 0) {
+            setCurrentStep(savedState.currentStep);
+            setHasStarted(savedState.hasStarted);
+            setCompletionData(savedState.completionData);
+            setMessages(savedMessages);
+
+            toast.success("Resumed from where you left off!");
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load state:", err);
+      } finally {
+        setIsLoadingState(false);
+      }
+    };
+
+    loadState();
+  }, [user, lessonId]);
+
+  // Save state on changes
+  const saveProgress = useCallback(async () => {
+    if (!user || !lessonId || !stateRef.current.hasStarted) return;
+
+    // Don't save if in step 0 with no messages (start)
+    if (stateRef.current.currentStep === 0 && messages.length === 0) return;
+
+    try {
+      const { error } = await supabase
+        .from('lesson_states')
+        .upsert({
+          user_id: user.id,
+          lesson_id: lessonId,
+          state: stateRef.current as any,
+          messages: messages as any,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'user_id,lesson_id' });
+
+      if (error) throw error;
+    } catch (err) {
+      console.error("Error saving lesson state:", err);
+    }
+  }, [user, lessonId, messages]); // dependent on messages changing
+
+  // Debounced save
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      saveProgress();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [saveProgress]);
 
   const addMessage = useCallback((role: "user" | "mentor", content: string) => {
     const newMessage: Message = {
@@ -212,14 +306,14 @@ export const useChatbot = () => {
   const simulateTyping = useCallback(async (content: string, replies?: string[]) => {
     setIsTyping(true);
     setQuickReplies([]);
-    
+
     // Simulate typing delay based on content length
     const delay = Math.min(1500 + content.length * 5, 3000);
     await new Promise((resolve) => setTimeout(resolve, delay));
-    
+
     setIsTyping(false);
     addMessage("mentor", content);
-    
+
     if (replies) {
       setQuickReplies(replies);
     }
@@ -228,7 +322,7 @@ export const useChatbot = () => {
   const startLesson = useCallback(async () => {
     if (hasStarted) return;
     setHasStarted(true);
-    
+
     const firstStep = lessonFlow[0];
     await simulateTyping(firstStep.mentorMessage, firstStep.quickReplies);
   }, [hasStarted, simulateTyping]);
@@ -236,7 +330,7 @@ export const useChatbot = () => {
   const sendMessage = useCallback(async (content: string) => {
     // Add user message
     addMessage("user", content);
-    
+
     // Check for restart
     if (content.toLowerCase().includes("restart")) {
       setCurrentStep(0);
@@ -244,15 +338,15 @@ export const useChatbot = () => {
       await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
       return;
     }
-    
+
     // If we're in the lesson flow
     if (currentStep < lessonFlow.length - 1) {
       const nextStepIndex = currentStep + 1;
       setCurrentStep(nextStepIndex);
-      
+
       const nextStep = lessonFlow[nextStepIndex];
       await simulateTyping(nextStep.mentorMessage, nextStep.quickReplies);
-      
+
       // Mark as complete when reaching the final step (lesson 1 has no post-test, so we give 100%)
       if (nextStepIndex === lessonFlow.length - 1) {
         setCompletionData({ postTestScore: 1, postTestTotal: 1 });
@@ -260,7 +354,7 @@ export const useChatbot = () => {
     } else {
       // We're at the end, handle open questions
       const response = getOpenResponse(content);
-      
+
       if (response === "RESTART") {
         setCurrentStep(0);
         setCompletionData(null);
@@ -279,6 +373,23 @@ export const useChatbot = () => {
     setCompletionData(null);
   }, []);
 
+  const deleteProgress = useCallback(async () => {
+    if (user && lessonId) {
+      try {
+        await supabase
+          .from('lesson_states')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('lesson_id', lessonId);
+
+        toast.info("Progress cleared");
+        resetLesson();
+      } catch (err) {
+        console.error("Error clearing state:", err);
+      }
+    }
+  }, [user, lessonId, resetLesson]);
+
   return {
     messages,
     isTyping,
@@ -288,5 +399,7 @@ export const useChatbot = () => {
     hasStarted,
     resetLesson,
     completionData,
+    isLoadingState,
+    deleteProgress,
   };
 };
