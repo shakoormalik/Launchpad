@@ -34,7 +34,8 @@ export const useProgressTracking = () => {
         const { data, error } = await supabase
           .from('user_progress')
           .select('*')
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .eq('status', 'completed');
 
         if (error) throw error;
 
@@ -42,7 +43,7 @@ export const useProgressTracking = () => {
           lessonId: row.lesson_id,
           completed: row.status === 'completed',
           postTestScore: row.score_post || 0,
-          postTestTotal: 100, // Defaulting to 100 as total isn't in DB schema yet, or we assume percentage
+          postTestTotal: row.score_post_total || 10, // Get actual quiz length from database
           completedAt: row.updated_at
         }));
 
@@ -100,34 +101,14 @@ export const useProgressTracking = () => {
 
     // Save to Supabase
     try {
-      // Calculate percentage for DB storage (since we assume 100 base on fetch)
-      const scorePercentage = Math.round((postTestScore / postTestTotal) * 100);
-
-      // Emergency: Ensure profile exists to prevent "violates foreign key constraint" error
-      // This happens if the profile wasn't created during signup (e.g. network error)
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert(
-          {
-            id: user.id,
-            first_name: 'Student',
-            last_name: '(Recovered)',
-            group_name: 'Self-Study'
-          },
-          { onConflict: 'id', ignoreDuplicates: true }
-        );
-
-      if (profileError) {
-        console.warn("Attempted to auto-fix profile but failed:", profileError);
-      }
-
       const { error } = await supabase
         .from('user_progress')
         .upsert({
           user_id: user.id,
           lesson_id: lessonId,
           status: 'completed',
-          score_post: scorePercentage, // Saving as percentage
+          score_post: postTestScore,        // Save raw score (e.g., 4 correct)
+          score_post_total: postTestTotal,  // Save total questions (e.g., 5 questions)
           updated_at: new Date().toISOString()
         }, {
           onConflict: 'user_id,lesson_id'
@@ -159,25 +140,30 @@ export const useProgressTracking = () => {
     totalQuestions: number;
     lessonsCompleted: number;
   } => {
-    if (progress.lessonsCompleted.length === 0) {
+    // Filter for completed lessons with valid scores AND totals
+    const completedLessons = progress.lessonsCompleted.filter(
+      l => l.completed && typeof l.postTestScore === 'number' && typeof l.postTestTotal === 'number' && l.postTestTotal > 0
+    );
+
+    if (completedLessons.length === 0) {
       return { percentage: 0, isPassing: false, totalCorrect: 0, totalQuestions: 0, lessonsCompleted: 0 };
     }
 
-    // Simplification since we might not have exact totals in DB
-    const totalScore = progress.lessonsCompleted.reduce((sum, l) => sum + l.postTestScore, 0);
-    // Assuming each lesson is worth 100 points for now if total missing, or use stored total
-    const totalPossible = progress.lessonsCompleted.length * 100;
+    // Calculate total correct answers across ALL quizzes
+    const totalCorrect = completedLessons.reduce((sum, l) => sum + l.postTestScore, 0);
 
-    // Use the actual totals if we have them, but for the DB migration, we might lose 'total' info
-    // For now, let's just use the average score
-    const average = Math.round(totalScore / progress.lessonsCompleted.length);
+    // Calculate total questions across ALL quizzes
+    const totalQuestions = completedLessons.reduce((sum, l) => sum + l.postTestTotal, 0);
+
+    // Calculate weighted percentage (correct answers / total questions)
+    const percentage = Math.round((totalCorrect / totalQuestions) * 100);
 
     return {
-      percentage: average,
-      isPassing: average >= 80,
-      totalCorrect: totalScore,
-      totalQuestions: totalPossible,
-      lessonsCompleted: progress.lessonsCompleted.length,
+      percentage,
+      isPassing: percentage >= 80,
+      totalCorrect,
+      totalQuestions,
+      lessonsCompleted: completedLessons.length,
     };
   }, [progress]);
 
