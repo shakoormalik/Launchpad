@@ -199,10 +199,42 @@ export const useProgressTracking = () => {
     return `📚 Keep learning${name}! You've completed ${completed} lessons so far.`;
   }, [progress, getOverallGrade, profile]);
 
-  const resetProgress = useCallback(async () => {
+  const resetLessonProgress = useCallback(async (lessonId: string) => {
     if (!user) return;
-    // Logic to clear DB progress if needed, usually we don't want this for students
-    setProgress({ lessonsCompleted: [], totalLessonsCompleted: 0 });
+
+    try {
+      // 1. Delete from Supabase
+      const { error } = await supabase
+        .from('user_progress')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('lesson_id', lessonId);
+
+      if (error) throw error;
+
+      // 2. Update local state
+      setProgress(prev => {
+        const newLessonsCompleted = prev.lessonsCompleted.filter(l => l.lessonId !== lessonId);
+        return {
+          lessonsCompleted: newLessonsCompleted,
+          totalLessonsCompleted: newLessonsCompleted.length,
+        };
+      });
+
+      // 3. Clear any lesson specific state if it exists (optional but good practice)
+      const { error: stateError } = await supabase
+        .from('lesson_states')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('lesson_id', lessonId);
+
+      if (stateError) console.log("Note: No active session state to clear or error clearing it");
+
+      toast.success("Lesson reset! You can now retake the quiz.");
+    } catch (error: any) {
+      console.error("Error resetting lesson:", error);
+      toast.error(error.message || "Failed to reset lesson");
+    }
   }, [user]);
 
   return {
@@ -212,7 +244,7 @@ export const useProgressTracking = () => {
     getLessonProgress,
     getOverallGrade,
     getEncouragementMessage,
-    resetProgress,
+    resetLessonProgress,
   };
 };
 

@@ -31,7 +31,8 @@ export const ChatContainer = () => {
     recordLessonCompletion,
     getLessonProgress,
     getOverallGrade,
-    getEncouragementMessage
+    getEncouragementMessage,
+    resetLessonProgress
   } = useProgressTracking();
 
   // Legacy hooks for Lesson 1 and 2
@@ -235,6 +236,7 @@ export const ChatContainer = () => {
               onSelectLesson={handleSelectLesson}
               completedLessons={completedLessons}
               lessonProgress={lessonProgressMap}
+              onResetLesson={resetLessonProgress}
             />
 
             <p className="text-xs text-muted-foreground mt-6 text-center max-w-xs">
