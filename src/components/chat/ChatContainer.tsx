@@ -201,7 +201,7 @@ export const ChatContainer = () => {
         <ChatHeader />
 
         <div className="flex-1 overflow-y-auto p-4 pt-6 flex flex-col items-center justify-start">
-          <div className="flex flex-col items-center justify-center animate-fade-in py-8 max-w-lg w-full">
+          <div className="flex flex-col items-center justify-center animate-fade-in py-8 max-w-lg lg:max-w-6xl w-full">
             <img
               src={launchpadLogo}
               alt="LaunchPad Financial Literacy Series"

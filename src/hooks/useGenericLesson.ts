@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { generateTopicAnalogy } from "@/data/topicAnalogies";
+import { generateTopicAnalogy, topicContentMap } from "@/data/topicAnalogies";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -491,7 +491,7 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
         } else if (lowerContent.includes("ask") || lowerContent.includes("question")) {
           stateRef.current.phase = "asking-question";
           await simulateTyping(
-            "What's on your mind? I'm listening.",
+            "Type your question below and I’ll help.",
             []
           );
         } else {
@@ -509,12 +509,113 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
           return true;
         }
 
-        // Handle the user's question
+        const query = content.toLowerCase();
+        const queryKeywords = query.replace(/[?.,!]/g, '')
+          .split(/\s+/)
+          .filter(w => w.length > 3 && !["what", "where", "when", "how", "why", "does", "this", "that", "about", "tell", "explain", "give", "please"].includes(w));
+
+        // 1. Identify the most relevant Topic (Topic-First Approach)
+        let bestTopic: LessonTopic | null = null;
+        let bestTopicScore = 0;
+
+        lessonData.topics.forEach(t => {
+          let score = 0;
+          // Title match is very strong
+          if (query.includes(t.title.toLowerCase())) score += 50;
+
+          // Keyword matches in title
+          const titleWords = t.title.toLowerCase().split(/\s+/);
+          titleWords.forEach(tw => {
+            if (queryKeywords.some(qw => qw === tw || tw.includes(qw))) score += 10;
+          });
+
+          // Keyword matches in content (frequency)
+          const contentLower = t.content.toLowerCase();
+          queryKeywords.forEach(qw => {
+            if (contentLower.includes(qw)) score += 5;
+          });
+
+          if (score > bestTopicScore) {
+            bestTopicScore = score;
+            bestTopic = t;
+          }
+        });
+
+        // Threshold for topic match - if no words matched relevant topics
+        if (!bestTopic || bestTopicScore < 5) {
+          await simulateTyping(
+            "This concept is not directly covered in this lesson. Please revisit the lesson content or ask about a related topic.",
+            ["Ask another question", "Thanks, I'm done"]
+          );
+          stateRef.current.phase = "complete";
+          break;
+        }
+
+        // 2. Within Best Topic, find best matched content
+        const validTopic = bestTopic as LessonTopic;
+        const extra = topicContentMap[validTopic.title]?.default;
+
+        interface Segment { text: string; score: number; type: 'definition' | 'example' | 'analogy' | 'fact' }
+        let segments: Segment[] = [];
+
+        // Add content sentences - split by sentence enders
+        const sent = validTopic.content.match(/[^.!?]+[.!?]+/g) || [validTopic.content];
+        sent.forEach(s => {
+          if (s.trim().length > 20) {
+            segments.push({ text: s.trim(), score: 0, type: 'definition' });
+          }
+        });
+
+        // Add extra content if explicitly available
+        if (extra) {
+          segments.push({ text: extra.realWorldExample, score: 0, type: 'example' });
+          segments.push({ text: extra.analogy, score: 0, type: 'analogy' });
+          if (extra.funFact) segments.push({ text: extra.funFact, score: 0, type: 'fact' });
+        }
+
+        // Detect specific intent
+        const isAskingExample = query.includes("example") || query.includes("like");
+        const isAskingDefinition = query.includes("what is") || query.includes("mean") || query.includes("define");
+
+        // Score segments based on query
+        segments.forEach(seg => {
+          const txt = seg.text.toLowerCase();
+          let s = 0;
+
+          // Keyword overlap
+          queryKeywords.forEach(qw => {
+            if (txt.includes(qw)) s += 5;
+          });
+
+          // Intent Boost
+          if (isAskingExample && seg.type === 'example') s += 20;
+          if (isAskingDefinition && seg.type === 'definition' && (txt.includes("is") || txt.includes("means") || txt.includes("refers to"))) s += 15;
+
+          // Bias towards main content for general queries
+          if (seg.type === 'definition' && !isAskingExample) s += 5;
+
+          seg.score = s;
+        });
+
+        // Sort by score
+        segments.sort((a, b) => b.score - a.score);
+        const bestSegment = segments[0];
+
+        // 3. Construct Response
+        // Respond using ONLY the matched text.
+        let finalResponse = bestSegment.text;
+
+        // "If helpful, follow with one brief example from the same lesson section only."
+        // Try to append example if we returned a definition and have not already used the example
+        if (bestSegment.type === 'definition' && extra?.realWorldExample && !isAskingExample) {
+          finalResponse += `\n\nExample: ${extra.realWorldExample}`;
+        }
+
         await simulateTyping(
-          "Great question! This lesson covered the fundamentals. Feel free to explore more lessons to deepen your understanding, or type 'menu' to return to the lesson selection.",
+          finalResponse,
           ["Ask another question", "Thanks, I'm done"]
         );
-        stateRef.current.phase = "complete"; // Return to complete state to show options
+        stateRef.current.phase = "complete";
         break;
       }
     }

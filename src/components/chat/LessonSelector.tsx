@@ -18,10 +18,12 @@ export const LessonSelector = ({
   lessonProgress = new Map()
 }: LessonSelectorProps) => {
   return (
-    <div className="space-y-4 w-full max-w-md">
-      <h3 className="text-lg font-semibold text-center text-foreground mb-4">
-        Choose a Lesson
-      </h3>
+    <div className="grid gap-4 w-full grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+      <div className="col-span-full mb-2">
+        <h3 className="text-lg font-semibold text-center text-foreground">
+          Choose a Lesson
+        </h3>
+      </div>
 
       {lessons.map((lesson) => {
         const isCompleted = completedLessons.includes(lesson.id);
@@ -36,7 +38,7 @@ export const LessonSelector = ({
         return (
           <div
             key={lesson.id}
-            className={`relative rounded-xl border-2 transition-all overflow-hidden ${lesson.isAvailable
+            className={`relative rounded-xl border-2 transition-all overflow-hidden h-full flex flex-col ${lesson.isAvailable
               ? isCompleted
                 ? (isPassing || isLesson1)
                   ? "border-primary/50 bg-primary/5 hover:border-primary hover:shadow-md cursor-pointer"
@@ -47,7 +49,7 @@ export const LessonSelector = ({
           >
             <Button
               variant="ghost"
-              className="w-full h-auto p-3 sm:p-4 flex flex-col items-start gap-2 text-left whitespace-normal"
+              className="w-full h-full p-3 sm:p-4 flex flex-col items-start gap-2 text-left whitespace-normal flex-1"
               disabled={!lesson.isAvailable}
               onClick={() => lesson.isAvailable && onSelectLesson(lesson.id)}
             >

@@ -8,7 +8,7 @@ export interface TopicAnalogy {
 }
 
 // Comprehensive mapping of lesson + topic to unique content
-const topicContentMap: Record<string, Record<string, TopicAnalogy>> = {
+export const topicContentMap: Record<string, Record<string, TopicAnalogy>> = {
   // Lesson 2: Living on Your Own
   "Earning a Living & Managing Your Time Wisely": {
     default: {
@@ -862,7 +862,7 @@ export const generateTopicAnalogy = (topicTitle: string, topicContent: string): 
   if (topicData && topicData.default) {
     return topicData.default;
   }
-  
+
   // If no direct match, create unique content based on keywords
   return generateContentFromKeywords(topicTitle, topicContent);
 };
@@ -872,10 +872,10 @@ const generateContentFromKeywords = (topicTitle: string, topicContent: string): 
   const title = topicTitle.toLowerCase();
   const content = topicContent.toLowerCase();
   const combined = title + " " + content;
-  
+
   // Create unique hash from topic title to ensure consistency
   const hash = topicTitle.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  
+
   // Arrays of templates that get selected based on topic hash
   const analogyTemplates = [
     `Think of ${topicTitle.split(' ').slice(0, 3).join(' ')} like building with LEGO blocks – each piece connects to create something bigger. Skip pieces, and the structure is weak. Build carefully, and you create something impressive.`,
@@ -884,7 +884,7 @@ const generateContentFromKeywords = (topicTitle: string, topicContent: string): 
     `${topicTitle.split(' ').slice(0, 3).join(' ')} is like learning to ride a bike – wobbly at first, then second nature. The key is starting small, practicing consistently, and not giving up after a fall.`,
     `Think of ${topicTitle.split(' ').slice(0, 3).join(' ')} as your phone's storage – you have limited space, so you choose what's worth keeping. Fill it with junk, and there's no room for what matters.`
   ];
-  
+
   const exampleTemplates = [
     `A college student applying this concept saved $1,200 in their first year by making one small change each month. Small consistent improvements compound into major results.`,
     `A young professional tracked this for 30 days and discovered patterns they'd never noticed. Awareness alone changed their behavior and improved their outcomes by 25%.`,
@@ -892,7 +892,7 @@ const generateContentFromKeywords = (topicTitle: string, topicContent: string): 
     `A first-generation college student used this principle to negotiate a better financial aid package, saving over $8,000 across four years.`,
     `A new employee applied this concept at work and received a promotion within 18 months – their manager specifically mentioned this skill during the review.`
   ];
-  
+
   const funFactTemplates = [
     `People who understand this concept are 3x more likely to achieve their financial goals within 5 years compared to those who don't.`,
     `This principle has been taught in financial education for over 100 years because it consistently produces results when applied.`,
@@ -900,7 +900,7 @@ const generateContentFromKeywords = (topicTitle: string, topicContent: string): 
     `Only 17% of high school students learn this concept before graduation, giving those who understand it a significant advantage.`,
     `Experts estimate that applying this principle consistently saves the average person $3,000-$5,000 per year in avoided mistakes.`
   ];
-  
+
   return {
     analogy: analogyTemplates[hash % analogyTemplates.length],
     realWorldExample: exampleTemplates[(hash * 2) % exampleTemplates.length],
@@ -912,13 +912,13 @@ const generateContentFromKeywords = (topicTitle: string, topicContent: string): 
 export const generateDiscussionResponse = (topicTitle: string, studentResponse: string): string => {
   const title = topicTitle.toLowerCase();
   const response = studentResponse.toLowerCase();
-  
+
   // Check response length for engagement level
   const isDetailedResponse = response.length > 50;
   const mentionsPersonalExperience = response.includes("i") || response.includes("my") || response.includes("me");
-  
+
   let acknowledgment: string;
-  
+
   if (isDetailedResponse && mentionsPersonalExperience) {
     acknowledgment = "I really appreciate you sharing that personal experience! 💫 It's exactly that kind of real-life reflection that helps these concepts stick.";
   } else if (isDetailedResponse) {
@@ -935,6 +935,6 @@ export const generateDiscussionResponse = (topicTitle: string, studentResponse: 
     ];
     acknowledgment = quickAcknowledgments[Math.floor(Math.random() * quickAcknowledgments.length)];
   }
-  
+
   return acknowledgment;
 };
