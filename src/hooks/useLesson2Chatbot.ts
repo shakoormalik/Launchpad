@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef } from "react";
+import { useQuestionAnswering } from "./useQuestionAnswering";
 import {
   lesson2Introduction,
   preTestIntro,
@@ -60,6 +61,26 @@ export const useLesson2Chatbot = (lessonId?: string) => {
   const [hasStarted, setHasStarted] = useState(false);
   const [completionData, setCompletionData] = useState<LessonCompletionData | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
+
+  // Aggregate full lesson context for AI
+  const fullContext = `
+  Introduction: ${lesson2Introduction}
+  
+  Pre-Test:
+  ${lesson2PreTest.map(q => `Q: ${q.question}\nA: ${q.mentorAnswer}`).join('\n')}
+  
+  Post-Test:
+  ${lesson2PostTest.map(q => `Q: ${q.question}\nA: ${q.correctAnswer}\nExplanation: ${q.explanation}`).join('\n')}
+  
+  Completion: ${lesson2Completion}
+  `;
+
+  const questionAnswering = useQuestionAnswering(
+    lesson2Topics,
+    "Living on Your Own",
+    fullContext
+  );
+
   const stateRef = useRef<Lesson2State>(initialState);
   const [, forceUpdate] = useState({});
 
@@ -343,31 +364,29 @@ export const useLesson2Chatbot = (lessonId?: string) => {
       case "complete": {
         const q = content.toLowerCase();
 
-        if (q.includes("menu") || q.includes("back") || q.includes("lesson")) {
+        // Handle "Ask a question" - enter Q&A mode
+        if (q.includes("ask") && (q.includes("question") || q.includes("questions"))) {
+          await questionAnswering.startQAMode();
+          return false;
+        }
+
+        // If in Q&A mode, handle the question
+        if (questionAnswering.isQAMode) {
+          const shouldExit = await questionAnswering.askQuestion(content);
+          if (shouldExit) {
+            questionAnswering.exitQAMode();
+            return true; // Return to menu
+          }
+          return false;
+        }
+
+        // Handle menu/back commands
+        if (q.includes("menu") || q.includes("back") || q.includes("done")) {
           return true;
         }
 
-        if (q.includes("budget")) {
-          await simulateTyping(
-            `Great question about budgeting!\n\nA budget is simply a plan for your money. Here's a basic approach:\n\n1. Calculate your monthly income\n2. List all your expenses (rent, utilities, food, transport)\n3. Subtract expenses from income\n4. Allocate what's left to savings and fun\n\nA popular method is the 50/30/20 rule:\n- 50% for needs (rent, bills, groceries)\n- 30% for wants (entertainment, dining out)\n- 20% for savings and debt repayment\n\nWant to know more about any specific aspect?`,
-            ["Tell me more", "Back to menu"]
-          );
-        } else if (q.includes("lease") || q.includes("rent")) {
-          await simulateTyping(
-            `Good question about leases and renting!\n\nKey things to look for in a lease:\n- Monthly rent amount and due date\n- Security deposit amount\n- Lease length (usually 6-12 months)\n- Pet policies\n- Maintenance responsibilities\n- Early termination clauses\n- Rules about guests and noise\n\nAlways read EVERYTHING before signing, and don't be afraid to ask questions!\n\nIs there something specific about leasing you want to know?`,
-            ["Tell me more", "Back to menu"]
-          );
-        } else if (q.includes("landlord") || q.includes("tenant")) {
-          await simulateTyping(
-            `Great question about tenant-landlord relationships!\n\nYour rights as a tenant typically include:\n- A safe, habitable living space\n- Privacy (landlord must give notice before entering)\n- Protection from discrimination\n- Return of security deposit (if no damage)\n\nYour responsibilities include:\n- Paying rent on time\n- Keeping the property clean\n- Reporting maintenance issues\n- Following lease rules\n\nKnow your rights - they protect you!`,
-            ["Tell me more", "Back to menu"]
-          );
-        } else {
-          await simulateTyping(
-            `That's a thoughtful question!\n\nWhile I'm focused on the Living on Your Own lesson right now, I encourage you to keep exploring. The full LaunchPad Financial Literacy program covers many more topics!\n\nIs there anything specific about independent living, budgeting, or leases I can help with? Or type "menu" to go back to lesson selection.`,
-            ["Ask about budgeting", "Ask about leases", "Back to menu"]
-          );
-        }
+        // Implicitly start Q&A with the user's input
+        await questionAnswering.startQAMode(content);
         break;
       }
     }
@@ -381,8 +400,9 @@ export const useLesson2Chatbot = (lessonId?: string) => {
     setHasStarted(false);
     setCompletionData(null);
     stateRef.current = initialState;
+    questionAnswering.exitQAMode(); // Explicitly reset Q&A state
     forceUpdate({});
-  }, []);
+  }, [questionAnswering]);
 
   const deleteProgress = useCallback(async () => {
     if (user && lessonId) {
@@ -412,5 +432,8 @@ export const useLesson2Chatbot = (lessonId?: string) => {
     completionData,
     isLoadingState,
     deleteProgress,
+    isQAMode: questionAnswering.isQAMode,
+    qaMessages: questionAnswering.qaMessages,
+    qaTyping: questionAnswering.isTyping,
   };
 };

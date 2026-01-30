@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useQuestionAnswering } from "./useQuestionAnswering";
 
 export interface Message {
   id: string;
@@ -207,6 +208,15 @@ export const useChatbot = (lessonId?: string) => {
   const [completionData, setCompletionData] = useState<{ postTestScore: number; postTestTotal: number } | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
 
+  // Aggregate full lesson context for AI
+  const fullContext = lessonFlow.map(step => step.mentorMessage).join('\n\n');
+
+  const questionAnswering = useQuestionAnswering(
+    [], // Lesson 1 has no structured topics
+    "Earning Money",
+    fullContext
+  );
+
   // We need a ref to track state for saving, similar to other hooks
   // Since this legacy hook uses multiple state variables, we'll sync them to a ref for the saver
   const stateRef = useRef({
@@ -352,7 +362,30 @@ export const useChatbot = (lessonId?: string) => {
         setCompletionData({ postTestScore: 1, postTestTotal: 1 });
       }
     } else {
-      // We're at the end, handle open questions
+      // We're at the end
+      const q = content.toLowerCase();
+
+      // Handle "Ask a question" triggers
+      if (q.includes("ask") && (q.includes("question") || q.includes("questions"))) {
+        await questionAnswering.startQAMode();
+        return;
+      }
+
+      // If in Q&A mode
+      if (questionAnswering.isQAMode) {
+        const shouldExit = await questionAnswering.askQuestion(content);
+        if (shouldExit) {
+          questionAnswering.exitQAMode();
+          // Show completion menu again
+          await simulateTyping(
+            "What would you like to do next?",
+            ["Ask a question", "Restart the lesson"]
+          );
+        }
+        return;
+      }
+
+      // Handle standard completion interaction (legacy)
       const response = getOpenResponse(content);
 
       if (response === "RESTART") {
@@ -360,10 +393,18 @@ export const useChatbot = (lessonId?: string) => {
         setCompletionData(null);
         await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
       } else {
-        await simulateTyping(response, ["Tell me more", "Restart the lesson"]);
+        // If it was a specific question handled by getOpenResponse, we show that
+        // Otherwise, suggest Q&A or Restart
+        if (content.toLowerCase().includes("restart")) {
+          // Already handled above
+        } else {
+          // If not a restart command, treat as implicit Q&A request
+          await questionAnswering.startQAMode(content);
+          return;
+        }
       }
     }
-  }, [addMessage, currentStep, simulateTyping]);
+  }, [addMessage, currentStep, simulateTyping, questionAnswering]);
 
   const resetLesson = useCallback(() => {
     setMessages([]);
@@ -371,7 +412,8 @@ export const useChatbot = (lessonId?: string) => {
     setQuickReplies([]);
     setHasStarted(false);
     setCompletionData(null);
-  }, []);
+    questionAnswering.exitQAMode(); // Explicitly reset Q&A state
+  }, [questionAnswering]);
 
   const deleteProgress = useCallback(async () => {
     if (user && lessonId) {
@@ -401,5 +443,8 @@ export const useChatbot = (lessonId?: string) => {
     completionData,
     isLoadingState,
     deleteProgress,
+    isQAMode: questionAnswering.isQAMode,
+    qaMessages: questionAnswering.qaMessages,
+    qaTyping: questionAnswering.isTyping,
   };
 };

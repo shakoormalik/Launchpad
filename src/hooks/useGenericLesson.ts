@@ -3,6 +3,8 @@ import { generateTopicAnalogy, topicContentMap } from "@/data/topicAnalogies";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { useQuestionAnswering } from "./useQuestionAnswering";
+import { getLessonName } from "@/utils/lessonNames";
 
 export interface Message {
   id: string;
@@ -56,7 +58,8 @@ type LessonPhase =
   | "topic-learn-more"
   | "posttest-intro"
   | "posttest"
-  | "asking-question"
+  | "posttest-intro"
+  | "posttest"
   | "complete";
 
 interface LessonState {
@@ -92,6 +95,27 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
   const [hasStarted, setHasStarted] = useState(false);
   const [completionData, setCompletionData] = useState<LessonCompletionData | null>(null);
   const [isLoadingState, setIsLoadingState] = useState(false);
+
+  const lessonDisplayName = getLessonName(lessonId);
+
+  // Aggregate full lesson context for AI
+  const fullContext = `
+  Introduction: ${lessonData.lessonIntroduction}
+  
+  Pre-Test:
+  ${lessonData.preTest.map(q => `Q: ${q.question}\nA: ${q.correctAnswer || 'Open ended'}`).join('\n')}
+  
+  Post-Test:
+  ${lessonData.postTest.map(q => `Q: ${q.question}\nA: ${q.correctAnswer}\nExplanation: ${q.explanation}`).join('\n')}
+  
+  Completion: ${lessonData.lessonCompletion}
+  `;
+
+  const questionAnswering = useQuestionAnswering(
+    lessonData.topics || [],
+    lessonDisplayName,
+    fullContext
+  );
 
   const stateRef = useRef<LessonState>({ ...initialState });
 
@@ -477,8 +501,31 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
       }
 
       case "complete": {
-        if (content.toLowerCase().includes("menu") || content.toLowerCase().includes("return")) {
-          return true; // Signal to go back to menu
+        const q = content.toLowerCase();
+        console.log("GenericLesson complete phase. Content:", q);
+        console.log("Checking Q&A mode. isQAMode:", questionAnswering.isQAMode);
+
+        // Handle "Ask a question" - enter Q&A mode
+        if (q.includes("ask") && (q.includes("question") || q.includes("questions"))) {
+          console.log("Triggering startQAMode");
+          await questionAnswering.startQAMode();
+          return false;
+        }
+
+        // If in Q&A mode, handle the question
+        if (questionAnswering.isQAMode) {
+          console.log("Delegating to askQuestion");
+          const shouldExit = await questionAnswering.askQuestion(content);
+          if (shouldExit) {
+            questionAnswering.exitQAMode();
+            return true; // Return to menu
+          }
+          return false;
+        }
+
+        // Handle menu/back commands
+        if (q.includes("menu") || q.includes("back") || q.includes("done")) {
+          return true;
         }
 
         const lowerContent = content.toLowerCase();
@@ -486,142 +533,19 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
         if (lowerContent.includes("thanks") || lowerContent.includes("done")) {
           await simulateTyping(
             "You're welcome! I'm glad I could help you learn today. Feel free to return whenever you're ready for more!",
-            ["Return to menu"]
-          );
-        } else if (lowerContent.includes("ask") || lowerContent.includes("question")) {
-          stateRef.current.phase = "asking-question";
-          await simulateTyping(
-            "Type your question below and I’ll help.",
-            []
+            ["Back to menu"]
           );
         } else {
-          // Fallback for unexpected input
-          await simulateTyping(
-            "I'm here! Do you want to ask a question or are you all done for now?",
-            ["Ask a question", "Thanks, I'm done"]
-          );
+          // Implicitly start Q&A with the user's input
+          console.log("Implicitly starting Q&A mode with question:", content);
+          await questionAnswering.startQAMode(content);
         }
-        break;
-      }
-
-      case "asking-question": {
-        if (content.toLowerCase().includes("menu") || content.toLowerCase().includes("return")) {
-          return true;
-        }
-
-        const query = content.toLowerCase();
-        const queryKeywords = query.replace(/[?.,!]/g, '')
-          .split(/\s+/)
-          .filter(w => w.length > 3 && !["what", "where", "when", "how", "why", "does", "this", "that", "about", "tell", "explain", "give", "please"].includes(w));
-
-        // 1. Identify the most relevant Topic (Topic-First Approach)
-        let bestTopic: LessonTopic | null = null;
-        let bestTopicScore = 0;
-
-        lessonData.topics.forEach(t => {
-          let score = 0;
-          // Title match is very strong
-          if (query.includes(t.title.toLowerCase())) score += 50;
-
-          // Keyword matches in title
-          const titleWords = t.title.toLowerCase().split(/\s+/);
-          titleWords.forEach(tw => {
-            if (queryKeywords.some(qw => qw === tw || tw.includes(qw))) score += 10;
-          });
-
-          // Keyword matches in content (frequency)
-          const contentLower = t.content.toLowerCase();
-          queryKeywords.forEach(qw => {
-            if (contentLower.includes(qw)) score += 5;
-          });
-
-          if (score > bestTopicScore) {
-            bestTopicScore = score;
-            bestTopic = t;
-          }
-        });
-
-        // Threshold for topic match - if no words matched relevant topics
-        if (!bestTopic || bestTopicScore < 5) {
-          await simulateTyping(
-            "This concept is not directly covered in this lesson. Please revisit the lesson content or ask about a related topic.",
-            ["Ask another question", "Thanks, I'm done"]
-          );
-          stateRef.current.phase = "complete";
-          break;
-        }
-
-        // 2. Within Best Topic, find best matched content
-        const validTopic = bestTopic as LessonTopic;
-        const extra = topicContentMap[validTopic.title]?.default;
-
-        interface Segment { text: string; score: number; type: 'definition' | 'example' | 'analogy' | 'fact' }
-        let segments: Segment[] = [];
-
-        // Add content sentences - split by sentence enders
-        const sent = validTopic.content.match(/[^.!?]+[.!?]+/g) || [validTopic.content];
-        sent.forEach(s => {
-          if (s.trim().length > 20) {
-            segments.push({ text: s.trim(), score: 0, type: 'definition' });
-          }
-        });
-
-        // Add extra content if explicitly available
-        if (extra) {
-          segments.push({ text: extra.realWorldExample, score: 0, type: 'example' });
-          segments.push({ text: extra.analogy, score: 0, type: 'analogy' });
-          if (extra.funFact) segments.push({ text: extra.funFact, score: 0, type: 'fact' });
-        }
-
-        // Detect specific intent
-        const isAskingExample = query.includes("example") || query.includes("like");
-        const isAskingDefinition = query.includes("what is") || query.includes("mean") || query.includes("define");
-
-        // Score segments based on query
-        segments.forEach(seg => {
-          const txt = seg.text.toLowerCase();
-          let s = 0;
-
-          // Keyword overlap
-          queryKeywords.forEach(qw => {
-            if (txt.includes(qw)) s += 5;
-          });
-
-          // Intent Boost
-          if (isAskingExample && seg.type === 'example') s += 20;
-          if (isAskingDefinition && seg.type === 'definition' && (txt.includes("is") || txt.includes("means") || txt.includes("refers to"))) s += 15;
-
-          // Bias towards main content for general queries
-          if (seg.type === 'definition' && !isAskingExample) s += 5;
-
-          seg.score = s;
-        });
-
-        // Sort by score
-        segments.sort((a, b) => b.score - a.score);
-        const bestSegment = segments[0];
-
-        // 3. Construct Response
-        // Respond using ONLY the matched text.
-        let finalResponse = bestSegment.text;
-
-        // "If helpful, follow with one brief example from the same lesson section only."
-        // Try to append example if we returned a definition and have not already used the example
-        if (bestSegment.type === 'definition' && extra?.realWorldExample && !isAskingExample) {
-          finalResponse += `\n\nExample: ${extra.realWorldExample}`;
-        }
-
-        await simulateTyping(
-          finalResponse,
-          ["Ask another question", "Thanks, I'm done"]
-        );
-        stateRef.current.phase = "complete";
         break;
       }
     }
 
     return false;
-  }, [addMessage, lessonData, simulateTyping]);
+  }, [addMessage, lessonData, simulateTyping, questionAnswering]);
 
   const resetLesson = useCallback(async () => {
     setMessages([]);
@@ -629,8 +553,9 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
     setHasStarted(false);
     setCompletionData(null);
     stateRef.current = { ...initialState };
+    questionAnswering.exitQAMode(); // Explicitly reset Q&A state
     // Removed DB purge to fix "Back button wipes progress" bug
-  }, []);
+  }, [questionAnswering]);
 
   const deleteProgress = useCallback(async () => {
     if (user && lessonId) {
@@ -660,5 +585,8 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
     completionData,
     isLoadingState,
     deleteProgress,
+    isQAMode: questionAnswering.isQAMode,
+    qaMessages: questionAnswering.qaMessages,
+    qaTyping: questionAnswering.isTyping,
   };
 };
