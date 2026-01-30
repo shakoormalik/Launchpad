@@ -196,6 +196,31 @@ export const useLesson2Chatbot = (lessonId?: string) => {
   const sendMessage = useCallback(async (content: string): Promise<boolean> => {
     addMessage("user", content);
 
+    // Check if in Q&A mode
+    if (questionAnswering.isQAMode) {
+      const { answer, shouldExit } = await questionAnswering.processQuestion(content);
+
+      if (answer) {
+        await simulateTyping(answer, ["I understand, continue"]);
+      }
+
+      if (shouldExit) {
+        questionAnswering.setQAMode(false);
+        if (!answer) await simulateTyping("Resuming the lesson...", ["Continue"]);
+      }
+      return false;
+    }
+
+    // Check if user is asking a question
+    if (questionAnswering.isLikelyQuestion(content)) {
+      questionAnswering.setQAMode(true);
+      const { answer } = await questionAnswering.processQuestion(content);
+      if (answer) {
+        await simulateTyping(answer, ["I understand, continue"]);
+      }
+      return false;
+    }
+
     const state = stateRef.current;
 
     // Check for menu command at any point
@@ -366,17 +391,9 @@ export const useLesson2Chatbot = (lessonId?: string) => {
 
         // Handle "Ask a question" - enter Q&A mode
         if (q.includes("ask") && (q.includes("question") || q.includes("questions"))) {
-          await questionAnswering.startQAMode();
-          return false;
-        }
-
-        // If in Q&A mode, handle the question
-        if (questionAnswering.isQAMode) {
-          const shouldExit = await questionAnswering.askQuestion(content);
-          if (shouldExit) {
-            questionAnswering.exitQAMode();
-            return true; // Return to menu
-          }
+          questionAnswering.setQAMode(true);
+          const welcome = questionAnswering.getWelcomeMessage();
+          await simulateTyping(welcome);
           return false;
         }
 
@@ -386,7 +403,11 @@ export const useLesson2Chatbot = (lessonId?: string) => {
         }
 
         // Implicitly start Q&A with the user's input
-        await questionAnswering.startQAMode(content);
+        questionAnswering.setQAMode(true);
+        const { answer } = await questionAnswering.processQuestion(content);
+        if (answer) {
+          await simulateTyping(answer, ["I understand, continue"]);
+        }
         break;
       }
     }
@@ -400,7 +421,7 @@ export const useLesson2Chatbot = (lessonId?: string) => {
     setHasStarted(false);
     setCompletionData(null);
     stateRef.current = initialState;
-    questionAnswering.exitQAMode(); // Explicitly reset Q&A state
+    questionAnswering.setQAMode(false); // Explicitly reset Q&A state
     forceUpdate({});
   }, [questionAnswering]);
 
@@ -433,7 +454,5 @@ export const useLesson2Chatbot = (lessonId?: string) => {
     isLoadingState,
     deleteProgress,
     isQAMode: questionAnswering.isQAMode,
-    qaMessages: questionAnswering.qaMessages,
-    qaTyping: questionAnswering.isTyping,
   };
 };

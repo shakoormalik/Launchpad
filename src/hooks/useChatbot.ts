@@ -341,8 +341,40 @@ export const useChatbot = (lessonId?: string) => {
     // Add user message
     addMessage("user", content);
 
+    // Check if in Q&A mode
+    if (questionAnswering.isQAMode) {
+      const { answer, shouldExit } = await questionAnswering.processQuestion(content);
+
+      if (answer) {
+        await simulateTyping(answer, ["I understand, continue"]);
+      }
+
+      if (shouldExit) {
+        questionAnswering.setQAMode(false);
+        // Resuming logic for Lesson 1
+        if (!answer && currentStep < lessonFlow.length - 1) {
+          await simulateTyping("Resuming the lesson...", ["Continue"]);
+        } else if (!answer) {
+          // End of lesson resume
+          await simulateTyping("What would you like to do next?", ["Ask a question", "Restart the lesson"]);
+        }
+      }
+      return;
+    }
+
+    // Check if user is asking a question
+    if (questionAnswering.isLikelyQuestion(content)) {
+      questionAnswering.setQAMode(true);
+      const { answer } = await questionAnswering.processQuestion(content);
+      if (answer) {
+        await simulateTyping(answer, ["I understand, continue"]);
+      }
+      return;
+    }
+
     // Check for restart
     if (content.toLowerCase().includes("restart")) {
+      questionAnswering.setQAMode(false);
       setCurrentStep(0);
       setCompletionData(null);
       await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
@@ -365,43 +397,26 @@ export const useChatbot = (lessonId?: string) => {
       // We're at the end
       const q = content.toLowerCase();
 
-      // Handle "Ask a question" triggers
+      // Handle "Ask a question" triggers (explicit)
       if (q.includes("ask") && (q.includes("question") || q.includes("questions"))) {
-        await questionAnswering.startQAMode();
+        questionAnswering.setQAMode(true);
+        const welcome = questionAnswering.getWelcomeMessage();
+        await simulateTyping(welcome);
         return;
       }
 
-      // If in Q&A mode
-      if (questionAnswering.isQAMode) {
-        const shouldExit = await questionAnswering.askQuestion(content);
-        if (shouldExit) {
-          questionAnswering.exitQAMode();
-          // Show completion menu again
-          await simulateTyping(
-            "What would you like to do next?",
-            ["Ask a question", "Restart the lesson"]
-          );
-        }
-        return;
-      }
-
-      // Handle standard completion interaction (legacy)
+      // Check hardcoded open responses first
       const response = getOpenResponse(content);
+      if (response !== "RESTART" && !response.includes("thoughtful question")) {
+        await simulateTyping(response, ["Ask a question", "Restart the lesson"]);
+        return;
+      }
 
-      if (response === "RESTART") {
-        setCurrentStep(0);
-        setCompletionData(null);
-        await simulateTyping(lessonFlow[0].mentorMessage, lessonFlow[0].quickReplies);
-      } else {
-        // If it was a specific question handled by getOpenResponse, we show that
-        // Otherwise, suggest Q&A or Restart
-        if (content.toLowerCase().includes("restart")) {
-          // Already handled above
-        } else {
-          // If not a restart command, treat as implicit Q&A request
-          await questionAnswering.startQAMode(content);
-          return;
-        }
+      // If generic response, try AI
+      questionAnswering.setQAMode(true);
+      const { answer } = await questionAnswering.processQuestion(content);
+      if (answer) {
+        await simulateTyping(answer, ["I understand, continue"]);
       }
     }
   }, [addMessage, currentStep, simulateTyping, questionAnswering]);
@@ -412,7 +427,7 @@ export const useChatbot = (lessonId?: string) => {
     setQuickReplies([]);
     setHasStarted(false);
     setCompletionData(null);
-    questionAnswering.exitQAMode(); // Explicitly reset Q&A state
+    questionAnswering.setQAMode(false); // Explicitly reset Q&A state
   }, [questionAnswering]);
 
   const deleteProgress = useCallback(async () => {
@@ -444,7 +459,5 @@ export const useChatbot = (lessonId?: string) => {
     isLoadingState,
     deleteProgress,
     isQAMode: questionAnswering.isQAMode,
-    qaMessages: questionAnswering.qaMessages,
-    qaTyping: questionAnswering.isTyping,
   };
 };

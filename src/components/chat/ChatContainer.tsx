@@ -324,7 +324,7 @@ export const ChatContainer = () => {
               Back to Lessons
             </Button>
 
-            {(lessonData.isQAMode ? lessonData.qaMessages : lessonData.messages).map((message) => (
+            {lessonData.messages.map((message) => (
               <ChatMessage
                 key={message.id}
                 role={message.role}
@@ -332,7 +332,7 @@ export const ChatContainer = () => {
               />
             ))}
 
-            {(lessonData.isQAMode ? lessonData.qaTyping : lessonData.isTyping) && (
+            {lessonData.isTyping && (
               <ChatMessage role="mentor" content="" isTyping />
             )}
 
@@ -344,12 +344,12 @@ export const ChatContainer = () => {
       {lessonData.hasStarted && (
         <>
           <QuickReplies
-            options={lessonData.isQAMode ? ["Thanks, I'm done"] : lessonData.quickReplies}
+            options={lessonData.isQAMode ? ["I understand, continue"] : lessonData.quickReplies}
             onSelect={handleSendMessage}
           />
           <ChatInput
             onSend={handleSendMessage}
-            disabled={lessonData.isQAMode ? lessonData.qaTyping : lessonData.isTyping}
+            disabled={lessonData.isTyping}
           />
         </>
       )}

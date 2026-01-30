@@ -34,16 +34,55 @@ export const useQuestionAnswering = (
     lessonName: string,
     additionalContext: string = ""
 ) => {
-    const [qaMessages, setQaMessages] = useState<QAMessage[]>([]);
     const [isQAMode, setIsQAMode] = useState(false);
-    const [isTyping, setIsTyping] = useState(false);
-    console.log("useQuestionAnswering Render:", { isQAMode, msgCount: qaMessages.length });
+    console.log("useQuestionAnswering Render:", { isQAMode });
+
+    /**
+     * Helper to detect if input is likely a question
+     */
+    const isLikelyQuestion = useCallback((text: string): boolean => {
+        const t = text.trim().toLowerCase();
+        // Check for question mark
+        if (t.endsWith('?')) return true;
+
+        // Check for common question starters and imperative verbs
+        const starters = [
+            'what', 'how', 'why', 'who', 'where', 'when', 'can', 'does', 'do', 'did',
+            'is', 'are', 'explain', 'tell', 'give', 'show', 'list', 'describe', 'define',
+            'could', 'would', 'should', 'help'
+        ];
+
+        if (starters.some(s => t.startsWith(s + ' ') || t === s)) return true;
+
+        // Check for question-indicating keywords inside the sentence
+        const keywords = ['example', 'mean', 'definition', 'difference', 'vs'];
+        if (keywords.some(k => t.includes(k))) return true;
+
+        return false;
+    }, []);
+
+    /**
+     * Search local topics for an answer
+     */
+    const findLocalAnswer = useCallback((question: string): string | null => {
+        const q = question.toLowerCase();
+
+        // 1. Exact Title Match
+        const topicByTitle = lessonTopics.find(t => q.includes(t.title.toLowerCase()));
+        if (topicByTitle) {
+            let answer = `Here's what the lesson says about **${topicByTitle.title}**:\n\n${topicByTitle.content}`;
+            if (topicByTitle.analogy) answer += `\n\n💡 **Analogy:** ${topicByTitle.analogy}`;
+            return answer;
+        }
+
+        return null;
+    }, [lessonTopics]);
 
     /**
      * Generic fallback answer
      */
     const getGenericAnswer = useCallback((): string => {
-        return `That's a thoughtful question! 🤔\n\nI don't see that specific topic covered in the "${lessonName}" lesson. Try asking about the topics we discussed, like:\n\n${lessonTopics.slice(0, 3).map(t => `• ${t.title}`).join('\n')}\n\nOr type "done" to go back to the menu.`;
+        return `I'm currently unable to connect to my AI brain 🧠 to give you a custom answer.\n\nHowever, I can help you with the main topics of this lesson:\n\n${lessonTopics.slice(0, 3).map(t => `• ${t.title}`).join('\n')}\n\nPlease check your internet connection or API key if this persists.`;
     }, [lessonName, lessonTopics]);
 
     /**
@@ -51,24 +90,13 @@ export const useQuestionAnswering = (
     */
     const generateAIAnswer = useCallback(async (question: string): Promise<string | null> => {
         const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-        console.log("generateAIAnswer called. Key present:", !!apiKey); // Check if key exists
 
         if (!apiKey) {
             console.error("Missing Gemini API Key");
-            return null;
+            return "⚠️ **Configuration Error:** Missing VITE_GEMINI_API_KEY. Please check your .env file.";
         }
 
         const ai = new GoogleGenAI({ apiKey });
-
-        // Helper to generate content with a specific model
-        const generateWithModel = async (modelName: string, promptText: string) => {
-            console.log(`Attempting generation with model: ${modelName}`);
-            const response = await ai.models.generateContent({
-                model: modelName,
-                contents: promptText,
-            });
-            return response.text;
-        };
 
         // Prepare context from topics
         const context = lessonTopics.map(t =>
@@ -82,127 +110,103 @@ export const useQuestionAnswering = (
         Here is the main content covered in the lesson:
         ${context}
 
-        Here is additional context from the lesson (introductions, quizzes, dialogues):
+        Here is additional context from the lesson:
         ${additionalContext}
 
         Student Question: "${question}"
 
         Instructions:
-        1. Answer the question based primarily on the lesson content provided above.
-        2. If the answer is not explicitly in the lesson, use your general financial knowledge to answer, but mention that this wasn't covered in the specific lesson.
-        3. Keep the tone encouraging, educational, and appropriate for a teenage audience.
-        4. Keep the answer concise (under 4 sentences if possible).
-        5. Use simple formatting like bolding key terms.
+        1. Answer the question directly and helpfully.
+        2. use the provided lesson content as your primary source.
+        3. CRITICAL: If the answer is NOT in the lesson, use your general financial knowledge to answer it anyway. Do NOT refuse to answer. Do NOT say "I cannot answer".
+        4. Keep the tone encouraging, educational, and appropriate for a teenage audience.
+        5. Keep the answer concise (under 4 sentences if possible).
       `;
 
         try {
-            // Try preferred model from user request
-            return await generateWithModel("gemini-3-flash-preview", prompt);
+            const response = await ai.models.generateContent({
+                model: "gemini-3-flash-preview",
+                contents: prompt,
+            });
+            return response.text;
         } catch (error: any) {
-            console.warn("Primary model (gemini-3-flash-preview) failed, attempting fallback to gemini-1.5-flash. Error:", error);
+            console.error("Gemini AI Error:", error);
 
-            // Fallback to previous model
-            try {
-                return await generateWithModel("gemini-1.5-flash", prompt);
-            } catch (fallbackError) {
-                console.error("Secondary model failed, trying final fallback to gemini-pro:", fallbackError);
+            // Handle specific API errors
+            const errorMsg = error.toString();
+            if (errorMsg.includes("403") || errorMsg.includes("leaked")) {
+                return "⛔ **API Access Denied:** Your API key has been flagged as leaked by Google. Please generate a new key and update your .env file.";
+            }
+            if (errorMsg.includes("404")) {
+                // Fallback if model not found
                 try {
-                    return await generateWithModel("gemini-pro", prompt);
-                } catch (finalError) {
-                    console.error("All AI models failed:", finalError);
-                    return null;
+                    const fallbackResponse = await ai.models.generateContent({
+                        model: "gemini-2.0-flash-exp",
+                        contents: prompt
+                    });
+                    return fallbackResponse.text;
+                } catch (e) {
+                    console.error("Fallback failed", e);
                 }
             }
+
+            return null;
         }
     }, [lessonName, lessonTopics, additionalContext]);
 
     /**
-     * Handle user question
+     * Handle user question and return answer
      */
-    const askQuestion = useCallback(async (question: string): Promise<boolean> => {
-        console.log("askQuestion called with:", question);
-        // Add user message
-        const userMessage: QAMessage = {
-            id: Date.now().toString(),
-            role: 'user',
-            content: question,
-        };
+    const processQuestion = useCallback(async (question: string): Promise<{ answer: string | null, shouldExit: boolean }> => {
+        console.log("processQuestion called with:", question);
 
-        setQaMessages(prev => [...prev, userMessage]);
-
-        // Check for exit commands
+        // Check for continuation commands
         const q = question.toLowerCase();
-        if (q.includes('done') || q.includes('menu') || q.includes('back')) {
-            return true; // Signal to exit Q&A mode
+        if (q === 'continue' || q === 'continue lesson' || q === 'done' || q.includes('go back') || q.includes('understand, continue')) {
+            return { answer: null, shouldExit: true };
         }
 
-        // Simulate typing delay
-        setIsTyping(true);
+        // Try local search first
+        let answer = findLocalAnswer(question);
 
-        // Try AI answer first
-        let answer: string | null = null;
-        try {
-            answer = await generateAIAnswer(question);
-        } catch (e) {
-            console.log("AI generation failed, falling back to local search");
-        }
-
-        // Fallback if AI fails or returns null
         if (!answer) {
-            // Add artificial delay if AI failed quickly, to simulate "thinking"
-            if (!answer) await new Promise(resolve => setTimeout(resolve, 1000));
+            // Try AI answer
+            try {
+                answer = await generateAIAnswer(question);
+            } catch (e) {
+                console.log("AI generation failed", e);
+            }
+        }
+
+        // Fallback if both fail
+        if (!answer) {
+            // Add artificial delay if AI failed quickly
+            await new Promise(resolve => setTimeout(resolve, 1000));
             answer = getGenericAnswer();
         }
 
-        // Add mentor response
-        const assistantMessage: QAMessage = {
-            id: (Date.now() + 1).toString(),
-            role: 'mentor',
-            content: answer,
-        };
+        // Add continuation prompt
+        answer += "\n\nWould you like to **ask another question** or **continue the lesson**?";
 
-        setQaMessages(prev => [...prev, assistantMessage]);
-        setIsTyping(false);
-
-        return false; // Continue Q&A mode
-    }, [getGenericAnswer, generateAIAnswer]);
+        return { answer, shouldExit: false };
+    }, [getGenericAnswer, generateAIAnswer, findLocalAnswer]);
 
     /**
-     * Start Q&A mode
+     * Set Q&A mode
      */
-    const startQAMode = useCallback(async (initialQuestion?: string) => {
-        console.log("startQAMode called with:", initialQuestion);
-        setIsQAMode(true);
-        setQaMessages([]);
-
-        if (initialQuestion) {
-            // If starting with a question, immediately process it
-            await askQuestion(initialQuestion);
-        } else {
-            // Add welcome message
-            const welcomeMessage: QAMessage = {
-                id: Date.now().toString(),
-                role: 'mentor',
-                content: `Great! I'm here to answer questions about the "${lessonName}" lesson.\n\nWhat would you like to know?`,
-            };
-            setQaMessages([welcomeMessage]);
-        }
-    }, [lessonName, askQuestion]);
-
-    /**
-     * Exit Q&A mode
-     */
-    const exitQAMode = useCallback(() => {
-        setIsQAMode(false);
-        setQaMessages([]);
+    const setQAMode = useCallback((active: boolean) => {
+        setIsQAMode(active);
     }, []);
+
+    const getWelcomeMessage = useCallback(() => {
+        return `I'm happy to help! What question do you have about "${lessonName}"?`;
+    }, [lessonName]);
 
     return {
         isQAMode,
-        qaMessages,
-        isTyping,
-        startQAMode,
-        askQuestion,
-        exitQAMode,
+        setQAMode,
+        getWelcomeMessage,
+        processQuestion,
+        isLikelyQuestion
     };
 };
