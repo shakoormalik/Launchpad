@@ -100,11 +100,11 @@ export const LessonSelector = ({
                   </div>
                 </div>
 
-                <h4 className="font-semibold text-foreground text-base break-words w-full">
+                <h4 className="font-semibold text-foreground text-base lg:text-xl break-words w-full">
                   {lesson.title}
                 </h4>
 
-                <p className="text-sm text-muted-foreground line-clamp-2 break-words w-full">
+                <p className="text-sm lg:text-base text-muted-foreground line-clamp-2 break-words w-full">
                   {lesson.description}
                 </p>
 

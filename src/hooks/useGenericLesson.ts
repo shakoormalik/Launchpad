@@ -299,8 +299,11 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
       return false;
     }
 
-    // Check if user is asking a question
-    if (questionAnswering.isLikelyQuestion(content)) {
+    const state = stateRef.current;
+    const isQuizPhase = state.phase === 'pretest' || state.phase === 'posttest';
+
+    // Check if user is asking a question (but NOT during a quiz)
+    if (!isQuizPhase && questionAnswering.isLikelyQuestion(content)) {
       questionAnswering.setQAMode(true);
       const { answer } = await questionAnswering.processQuestion(content);
       if (answer) {
@@ -308,8 +311,6 @@ export const useGenericLesson = (lessonData: LessonData, lessonId?: string) => {
       }
       return false;
     }
-
-    const state = stateRef.current;
 
     // Handle menu/exit request
     if (content.toLowerCase().includes("menu")) {

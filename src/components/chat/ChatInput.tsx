@@ -33,7 +33,7 @@ export const ChatInput = ({ onSend, disabled }: ChatInputProps) => {
         onKeyDown={handleKeyDown}
         placeholder="Type your answer or question..."
         disabled={disabled}
-        className="min-h-[48px] max-h-[120px] resize-none rounded-xl border-2 border-muted focus:border-primary transition-colors"
+        className="min-h-[48px] max-h-[120px] resize-none rounded-xl border-2 border-muted focus:border-primary transition-colors text-base lg:text-lg p-3 lg:p-4"
         rows={1}
       />
       <Button

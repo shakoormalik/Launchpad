@@ -209,10 +209,10 @@ export const ChatContainer = () => {
               className="h-20 w-auto mb-6"
             />
 
-            <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
+            <h2 className="font-display text-2xl lg:text-4xl font-bold text-foreground mb-2 text-center">
               Welcome to LaunchPad{profile?.first_name ? `, ${profile.first_name}` : ""}!
             </h2>
-            <p className="text-muted-foreground text-center max-w-sm mb-6">
+            <p className="text-muted-foreground text-center max-w-sm lg:max-w-2xl lg:text-xl mb-6">
               Your journey to financial literacy starts here. Choose a lesson to begin learning!
             </p>
 
@@ -282,10 +282,10 @@ export const ChatContainer = () => {
               Lesson {lessonNumber}
             </span>
 
-            <h2 className="font-display text-2xl font-bold text-foreground mb-2 text-center">
+            <h2 className="font-display text-2xl lg:text-4xl font-bold text-foreground mb-2 text-center">
               {lessonTitle}
             </h2>
-            <p className="text-muted-foreground text-center max-w-sm mb-6">
+            <p className="text-muted-foreground text-center max-w-sm lg:max-w-2xl lg:text-xl mb-6">
               {lessonDescription}
             </p>
 
@@ -302,8 +302,8 @@ export const ChatContainer = () => {
                 </>
               ) : (
                 <>
-                  <Rocket className="w-5 h-5 mr-2" />
-                  Start the Lesson
+                  <Rocket className="w-5 h-5 mr-2 lg:w-6 lg:h-6" />
+                  <span className="lg:text-xl">Start the Lesson</span>
                 </>
               )}
             </Button>

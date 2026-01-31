@@ -51,7 +51,7 @@ export const ChatMessage = ({ role, content, isTyping }: ChatMessageProps) => {
             <span className="w-2 h-2 rounded-full bg-current opacity-60 animate-typing" style={{ animationDelay: "400ms" }} />
           </div>
         ) : (
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">{formatContent(content)}</p>
+          <p className="text-sm lg:text-lg leading-relaxed whitespace-pre-wrap">{formatContent(content)}</p>
         )}
       </div>
 

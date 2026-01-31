@@ -16,7 +16,7 @@ export const QuickReplies = ({ options, onSelect }: QuickRepliesProps) => {
           variant="outline"
           size="sm"
           onClick={() => onSelect(option)}
-          className="rounded-full border-2 border-primary/30 hover:border-primary hover:bg-primary/10 text-foreground transition-all hover:scale-105 active:scale-95"
+          className="rounded-full border-2 border-primary/30 hover:border-primary hover:bg-primary/10 text-foreground transition-all hover:scale-105 active:scale-95 lg:text-base lg:px-5 lg:py-6"
         >
           {option}
         </Button>
